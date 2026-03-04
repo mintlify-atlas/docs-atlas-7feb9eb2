@@ -1,0 +1,424 @@
+---
+title: Bridge Integration Guide
+description: Complete guide to integrating cross-chain bridge functionality using LiFi contracts
+---
+
+# Bridge Integration Guide
+
+This guide demonstrates how to integrate cross-chain bridge functionality using LiFi's bridge facets. We'll use AcrossFacet as an example, but the patterns apply to all bridge facets.
+
+## Overview
+
+Bridge facets provide two main methods:
+- **startBridgeTokensVia{Bridge}** - Direct bridge without source chain swap
+- **swapAndStartBridgeTokensVia{Bridge}** - Swap on source chain, then bridge
+
+## AcrossFacet Integration
+
+### Prerequisites
+
+```typescript
+import { ethers } from 'ethers';
+import { 
+  AcrossFacet__factory,
+  type ILiFi,
+  type AcrossFacet,
+  type LibSwap
+} from '@lifi/contract-types';
+
+// Initialize provider and signer
+const provider = new ethers.providers.Web3Provider(window.ethereum);
+const signer = provider.getSigner();
+
+// LiFi Diamond address (mainnet example)
+const LIFI_DIAMOND = '0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE';
+
+// Connect to AcrossFacet
+const acrossFacet = AcrossFacet__factory.connect(LIFI_DIAMOND, signer);
+```
+
+### Building Bridge Data
+
+The `BridgeData` struct contains metadata about the cross-chain transfer:
+
+```typescript
+function buildBridgeData(
+  receiver: string,
+  destinationChainId: number,
+  sendingAssetId: string,
+  minAmount: string
+): ILiFi.BridgeDataStruct {
+  return {
+    transactionId: ethers.utils.randomBytes(32), // Unique transaction ID
+    bridge: 'across',                            // Bridge name
+    integrator: 'my-dapp',                       // Your integrator name
+    referrer: ethers.constants.AddressZero,      // Referrer address (optional)
+    sendingAssetId,                              // Token address (or 0x0 for native)
+    receiver,                                    // Recipient on destination chain
+    minAmount: ethers.utils.parseUnits(minAmount, 18), // Minimum amount to receive
+    destinationChainId,                          // Destination chain ID
+    hasSourceSwaps: false,                       // Set to true if using swap method
+    hasDestinationCall: false                    // Set to true for destination calls
+  };
+}
+```
+
+### Building Across-Specific Data
+
+Across requires additional parameters:
+
+```typescript
+function buildAcrossData(
+  relayerFeePct: string,
+  quoteTimestamp: number
+): AcrossFacet.AcrossDataStruct {
+  return {
+    relayerFeePct: ethers.BigNumber.from(relayerFeePct), // Fee percentage (int64)
+    quoteTimestamp,                                       // Quote timestamp (uint32)
+    message: '0x',                                        // Optional message bytes
+    maxCount: ethers.constants.MaxUint256                 // Max fill count
+  };
+}
+```
+
+<Note>
+The `relayerFeePct` is a fixed-point number representing the fee percentage. Get this from Across API quotes. The `quoteTimestamp` must match the timestamp from the Across quote.
+</Note>
+
+### Direct Bridge (No Swap)
+
+<Steps>
+
+#### 1. Prepare Token Approval
+
+If bridging ERC20 tokens, approve the Diamond contract:
+
+```typescript
+import { ERC20__factory } from '@lifi/contract-types';
+
+const tokenAddress = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'; // USDC
+const amount = ethers.utils.parseUnits('100', 6); // 100 USDC
+
+const token = ERC20__factory.connect(tokenAddress, signer);
+const approveTx = await token.approve(LIFI_DIAMOND, amount);
+await approveTx.wait();
+```
+
+#### 2. Build Bridge Parameters
+
+```typescript
+const receiverAddress = '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb';
+const destinationChainId = 137; // Polygon
+const minAmount = '99.5'; // Account for slippage
+
+const bridgeData = buildBridgeData(
+  receiverAddress,
+  destinationChainId,
+  tokenAddress,
+  minAmount
+);
+
+const acrossData = buildAcrossData(
+  '100000000000000', // Example relayer fee from Across quote
+  Math.floor(Date.now() / 1000)
+);
+```
+
+#### 3. Execute Bridge Transaction
+
+```typescript
+try {
+  const tx = await acrossFacet.startBridgeTokensViaAcross(
+    bridgeData,
+    acrossData
+  );
+
+  console.log('Transaction hash:', tx.hash);
+  
+  const receipt = await tx.wait();
+  console.log('Bridge initiated in block:', receipt.blockNumber);
+} catch (error) {
+  console.error('Bridge failed:', error);
+}
+```
+
+</Steps>
+
+### Bridge with Source Swap
+
+Swap tokens on the source chain before bridging:
+
+<Steps>
+
+#### 1. Build Swap Data
+
+Define the swap operation:
+
+```typescript
+function buildSwapData(
+  dexAddress: string,
+  fromToken: string,
+  toToken: string,
+  fromAmount: string,
+  callData: string
+): LibSwap.SwapDataStruct {
+  return {
+    callTo: dexAddress,           // DEX contract to call
+    approveTo: dexAddress,        // Address to approve tokens to
+    sendingAssetId: fromToken,    // Token to swap from
+    receivingAssetId: toToken,    // Token to swap to
+    fromAmount: ethers.utils.parseUnits(fromAmount, 18),
+    callData,                     // Encoded swap function call
+    requiresDeposit: true         // Whether to transfer tokens first
+  };
+}
+```
+
+#### 2. Get DEX Calldata
+
+Obtain swap calldata from a DEX aggregator or directly:
+
+```typescript
+// Example: Uniswap V2 swap
+const uniswapRouter = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D';
+const path = [tokenIn, tokenOut];
+const deadline = Math.floor(Date.now() / 1000) + 60 * 20; // 20 minutes
+
+const swapInterface = new ethers.utils.Interface([
+  'function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] path, address to, uint deadline)'
+]);
+
+const swapCalldata = swapInterface.encodeFunctionData('swapExactTokensForTokens', [
+  ethers.utils.parseUnits('100', 18),  // amount in
+  ethers.utils.parseUnits('95', 6),    // min amount out
+  path,
+  LIFI_DIAMOND,  // Tokens sent to Diamond
+  deadline
+]);
+```
+
+#### 3. Execute Swap and Bridge
+
+```typescript
+const swapData = [
+  buildSwapData(
+    uniswapRouter,
+    tokenIn,
+    tokenOut,
+    '100',
+    swapCalldata
+  )
+];
+
+// Update bridge data for swap scenario
+const bridgeData = buildBridgeData(
+  receiverAddress,
+  destinationChainId,
+  tokenOut,  // Bridge the swapped token
+  '95'       // Minimum after swap
+);
+bridgeData.hasSourceSwaps = true;
+
+// Approve input token
+const inputToken = ERC20__factory.connect(tokenIn, signer);
+await (await inputToken.approve(LIFI_DIAMOND, ethers.utils.parseUnits('100', 18))).wait();
+
+// Execute swap + bridge
+const tx = await acrossFacet.swapAndStartBridgeTokensViaAcross(
+  bridgeData,
+  swapData,
+  acrossData
+);
+
+await tx.wait();
+```
+
+</Steps>
+
+## Bridging Native Tokens
+
+To bridge native ETH (or other native tokens):
+
+```typescript
+const bridgeData = buildBridgeData(
+  receiverAddress,
+  destinationChainId,
+  ethers.constants.AddressZero,  // Use zero address for native token
+  '0.95'  // Minimum ETH to receive
+);
+
+const acrossData = buildAcrossData(
+  relayerFeePct,
+  quoteTimestamp
+);
+
+const tx = await acrossFacet.startBridgeTokensViaAcross(
+  bridgeData,
+  acrossData,
+  { 
+    value: ethers.utils.parseEther('1.0')  // Send 1 ETH with transaction
+  }
+);
+
+await tx.wait();
+```
+
+## Monitoring Bridge Transactions
+
+Listen for the `LiFiTransferStarted` event:
+
+```typescript
+// Set up event filter
+const filter = acrossFacet.filters.LiFiTransferStarted();
+
+// Listen for events
+acrossFacet.on(filter, (bridgeData, event) => {
+  console.log('Bridge started:', {
+    transactionId: bridgeData.transactionId,
+    bridge: bridgeData.bridge,
+    receiver: bridgeData.receiver,
+    destinationChainId: bridgeData.destinationChainId.toString(),
+    amount: bridgeData.minAmount.toString(),
+    blockNumber: event.blockNumber,
+    txHash: event.transactionHash
+  });
+});
+
+// Execute bridge
+const tx = await acrossFacet.startBridgeTokensViaAcross(bridgeData, acrossData);
+const receipt = await tx.wait();
+
+// Parse events from receipt
+const transferStartedEvent = receipt.events?.find(
+  e => e.event === 'LiFiTransferStarted'
+);
+```
+
+## Error Handling
+
+<Warning>
+Always handle errors gracefully and provide user feedback.
+</Warning>
+
+```typescript
+import { ethers } from 'ethers';
+
+try {
+  const tx = await acrossFacet.startBridgeTokensViaAcross(bridgeData, acrossData);
+  await tx.wait();
+} catch (error: any) {
+  // Check for custom contract errors
+  if (error.errorName === 'CannotBridgeToSameNetwork') {
+    console.error('Cannot bridge to the same network');
+  } else if (error.errorName === 'InvalidAmount') {
+    console.error('Invalid amount specified');
+  } else if (error.errorName === 'InvalidReceiver') {
+    console.error('Invalid receiver address');
+  } else if (error.code === 'INSUFFICIENT_FUNDS') {
+    console.error('Insufficient funds for transaction');
+  } else if (error.code === 'UNPREDICTABLE_GAS_LIMIT') {
+    console.error('Transaction would fail - check parameters and allowances');
+  } else {
+    console.error('Unexpected error:', error.message);
+  }
+}
+```
+
+## Complete Example
+
+Here's a complete bridge integration:
+
+```typescript
+import { ethers } from 'ethers';
+import { AcrossFacet__factory, ERC20__factory } from '@lifi/contract-types';
+
+class AcrossBridge {
+  private acrossFacet: AcrossFacet;
+  private signer: ethers.Signer;
+  
+  constructor(
+    diamondAddress: string,
+    signer: ethers.Signer
+  ) {
+    this.acrossFacet = AcrossFacet__factory.connect(diamondAddress, signer);
+    this.signer = signer;
+  }
+  
+  async bridgeTokens(
+    tokenAddress: string,
+    amount: string,
+    receiverAddress: string,
+    destinationChainId: number,
+    relayerFeePct: string,
+    quoteTimestamp: number
+  ) {
+    // Approve tokens
+    if (tokenAddress !== ethers.constants.AddressZero) {
+      const token = ERC20__factory.connect(tokenAddress, this.signer);
+      const approveTx = await token.approve(
+        this.acrossFacet.address,
+        ethers.constants.MaxUint256
+      );
+      await approveTx.wait();
+    }
+    
+    // Build parameters
+    const bridgeData = {
+      transactionId: ethers.utils.randomBytes(32),
+      bridge: 'across',
+      integrator: 'my-dapp',
+      referrer: ethers.constants.AddressZero,
+      sendingAssetId: tokenAddress,
+      receiver: receiverAddress,
+      minAmount: ethers.utils.parseUnits(amount, 18),
+      destinationChainId,
+      hasSourceSwaps: false,
+      hasDestinationCall: false
+    };
+    
+    const acrossData = {
+      relayerFeePct: ethers.BigNumber.from(relayerFeePct),
+      quoteTimestamp,
+      message: '0x',
+      maxCount: ethers.constants.MaxUint256
+    };
+    
+    // Execute bridge
+    const tx = await this.acrossFacet.startBridgeTokensViaAcross(
+      bridgeData,
+      acrossData,
+      tokenAddress === ethers.constants.AddressZero 
+        ? { value: ethers.utils.parseEther(amount) }
+        : {}
+    );
+    
+    return tx.wait();
+  }
+}
+
+// Usage
+const bridge = new AcrossBridge(LIFI_DIAMOND, signer);
+const receipt = await bridge.bridgeTokens(
+  '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+  '100',
+  '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+  137, // Polygon
+  '100000000000000',
+  Math.floor(Date.now() / 1000)
+);
+```
+
+## Best Practices
+
+1. **Always validate inputs** - Check addresses, amounts, and chain IDs
+2. **Get fresh quotes** - Obtain current relayer fees from the bridge API
+3. **Set appropriate slippage** - Account for price impact and fees
+4. **Monitor events** - Listen for `LiFiTransferStarted` to confirm initiation
+5. **Handle errors** - Provide clear feedback for all error cases
+6. **Test on testnet** - Verify your integration before mainnet deployment
+
+## Next Steps
+
+- [Swap Integration](/guides/swap-integration) - Add DEX swap functionality
+- [Event Handling](/guides/event-handling) - Monitor bridge events
+- [Contract Reference](/api/bridges/across-facet) - Full AcrossFacet API

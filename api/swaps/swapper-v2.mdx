@@ -1,0 +1,225 @@
+---
+title: SwapperV2
+description: Base contract for swap functionality with event definitions
+---
+
+The `SwapperV2` contract is a base contract that provides event definitions used across swap operations in the LiFi protocol. It doesn't expose any public functions but defines the standard events emitted during swap and bridge operations.
+
+## Purpose
+
+SwapperV2 serves as a shared event interface for:
+- Generic swap operations
+- Bridge operations
+- Cross-chain transfers
+- Event tracking and indexing
+
+## Events
+
+### LiFiSwappedGeneric
+
+Emitted when a generic token swap is executed.
+
+<ParamField path="transactionId" type="bytes32">
+  Unique identifier for the transaction
+</ParamField>
+
+<ParamField path="integrator" type="string">
+  Name or identifier of the integrator
+</ParamField>
+
+<ParamField path="referrer" type="string">
+  Referrer address or identifier
+</ParamField>
+
+<ParamField path="fromAssetId" type="address">
+  Address of the token being swapped from
+</ParamField>
+
+<ParamField path="toAssetId" type="address">
+  Address of the token being swapped to
+</ParamField>
+
+<ParamField path="fromAmount" type="uint256">
+  Amount of tokens swapped from
+</ParamField>
+
+<ParamField path="toAmount" type="uint256">
+  Amount of tokens received
+</ParamField>
+
+### LiFiGenericSwapCompleted
+
+Emitted when a swap operation completes and tokens are transferred to the receiver.
+
+<ParamField path="transactionId" type="bytes32">
+  Unique identifier for the transaction
+</ParamField>
+
+<ParamField path="integrator" type="string">
+  Name or identifier of the integrator
+</ParamField>
+
+<ParamField path="referrer" type="string">
+  Referrer address or identifier
+</ParamField>
+
+<ParamField path="receiver" type="address">
+  Address receiving the swapped tokens
+</ParamField>
+
+<ParamField path="fromAssetId" type="address">
+  Address of the initial token
+</ParamField>
+
+<ParamField path="toAssetId" type="address">
+  Address of the final token
+</ParamField>
+
+<ParamField path="fromAmount" type="uint256">
+  Initial token amount
+</ParamField>
+
+<ParamField path="toAmount" type="uint256">
+  Final token amount received
+</ParamField>
+
+### LiFiTransferStarted
+
+Emitted when a bridge transfer is initiated.
+
+<ParamField path="bridgeData" type="ILiFi.BridgeData">
+  Complete bridge data structure containing:
+  - `transactionId`: Unique transaction identifier
+  - `bridge`: Name of the bridge being used
+  - `integrator`: Integrator identifier
+  - `referrer`: Referrer address
+  - `sendingAssetId`: Token being sent
+  - `receiver`: Destination address
+  - `minAmount`: Minimum amount expected
+  - `destinationChainId`: Target chain ID
+  - `hasSourceSwaps`: Whether source swaps are included
+  - `hasDestinationCall`: Whether destination calls are included
+</ParamField>
+
+### LiFiTransferCompleted
+
+Emitted when a transfer is successfully completed.
+
+<ParamField path="transactionId" type="bytes32">
+  Unique identifier for the transaction
+</ParamField>
+
+<ParamField path="receivingAssetId" type="address">
+  Address of the token received
+</ParamField>
+
+<ParamField path="receiver" type="address">
+  Address that received the tokens
+</ParamField>
+
+<ParamField path="amount" type="uint256">
+  Amount of tokens received
+</ParamField>
+
+<ParamField path="timestamp" type="uint256">
+  Block timestamp when completed
+</ParamField>
+
+### LiFiTransferRecovered
+
+Emitted when tokens are recovered from a failed transfer.
+
+<ParamField path="transactionId" type="bytes32">
+  Unique identifier for the transaction
+</ParamField>
+
+<ParamField path="receivingAssetId" type="address">
+  Address of the token recovered
+</ParamField>
+
+<ParamField path="receiver" type="address">
+  Address receiving the recovered tokens
+</ParamField>
+
+<ParamField path="amount" type="uint256">
+  Amount of tokens recovered
+</ParamField>
+
+<ParamField path="timestamp" type="uint256">
+  Block timestamp when recovered
+</ParamField>
+
+### BridgeToNonEVMChain
+
+Emitted when bridging to a non-EVM chain with bytes receiver.
+
+<ParamField path="transactionId" type="bytes32">
+  Unique identifier for the transaction
+</ParamField>
+
+<ParamField path="destinationChainId" type="uint256">
+  Target chain identifier
+</ParamField>
+
+<ParamField path="receiver" type="bytes">
+  Receiver address in bytes format
+</ParamField>
+
+### BridgeToNonEVMChainBytes32
+
+Emitted when bridging to a non-EVM chain with bytes32 receiver.
+
+<ParamField path="transactionId" type="bytes32">
+  Unique identifier for the transaction
+</ParamField>
+
+<ParamField path="destinationChainId" type="uint256">
+  Target chain identifier
+</ParamField>
+
+<ParamField path="receiver" type="bytes32">
+  Receiver address in bytes32 format
+</ParamField>
+
+## Usage Example
+
+```typescript
+import { SwapperV2__factory } from '@lifi/contract-types';
+import { ethers } from 'ethers';
+
+const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+const contract = SwapperV2__factory.connect(CONTRACT_ADDRESS, provider);
+
+// Listen to swap events
+contract.on('LiFiSwappedGeneric', (
+  transactionId,
+  integrator,
+  referrer,
+  fromAssetId,
+  toAssetId,
+  fromAmount,
+  toAmount
+) => {
+  console.log('Swap executed:', {
+    transactionId,
+    from: fromAssetId,
+    to: toAssetId,
+    amount: ethers.utils.formatUnits(toAmount, 18)
+  });
+});
+
+// Listen to transfer completion
+contract.on('LiFiTransferCompleted', (
+  transactionId,
+  receivingAssetId,
+  receiver,
+  amount,
+  timestamp
+) => {
+  console.log('Transfer completed:', {
+    transactionId,
+    receiver,
+    amount: ethers.utils.formatUnits(amount, 18)
+  });
+});
+```

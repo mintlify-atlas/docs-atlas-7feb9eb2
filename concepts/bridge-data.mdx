@@ -1,0 +1,258 @@
+---
+title: "BridgeData Structure"
+description: "Complete reference for the ILiFi.BridgeData struct used across all bridge integrations"
+---
+
+## Overview
+
+The `BridgeData` struct is a standardized data structure used across all LiFi bridge facets. It contains the essential information needed to execute a cross-chain transfer, regardless of which bridge protocol is being used.
+
+This standardization allows LiFi to support multiple bridge integrations while maintaining a consistent interface.
+
+## Type Definition
+
+```typescript
+export type BridgeDataStruct = {
+  transactionId: BytesLike;
+  bridge: string;
+  integrator: string;
+  referrer: string;
+  sendingAssetId: string;
+  receiver: string;
+  minAmount: BigNumberish;
+  destinationChainId: BigNumberish;
+  hasSourceSwaps: boolean;
+  hasDestinationCall: boolean;
+};
+```
+
+## Fields
+
+<ParamField path="transactionId" type="bytes32" required>
+  Unique identifier for this cross-chain transaction. This ID is used for tracking and correlating events across the bridge lifecycle.
+  
+  **Example**: `0x1234567890abcdef...`
+  
+  **Note**: Should be unique per transaction to enable proper tracking and avoid collisions.
+</ParamField>
+
+<ParamField path="bridge" type="string" required>
+  The name of the bridge protocol being used for this transfer.
+  
+  **Examples**: `"across"`, `"stargate"`, `"hop"`, `"cbridge"`
+  
+  **Purpose**: Used for event emissions and analytics to track which bridge handled the transfer.
+</ParamField>
+
+<ParamField path="integrator" type="string" required>
+  Address or identifier of the integrator/partner initiating this transaction.
+  
+  **Purpose**: Enables revenue sharing and tracking for partners integrating LiFi.
+  
+  **Example**: `"myapp.xyz"`
+</ParamField>
+
+<ParamField path="referrer" type="address" required>
+  Address that referred this transaction, used for fee distribution.
+  
+  **Purpose**: Supports referral programs and fee sharing.
+  
+  **Example**: `0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb`
+  
+  **Note**: Use zero address (`0x0000000000000000000000000000000000000000`) if no referrer.
+</ParamField>
+
+<ParamField path="sendingAssetId" type="address" required>
+  The token contract address being sent/bridged.
+  
+  **Examples**:
+  - ERC20 token: `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` (USDC)
+  - Native asset: `0x0000000000000000000000000000000000000000`
+  
+  **Note**: Use zero address for native assets (ETH, MATIC, etc.).
+</ParamField>
+
+<ParamField path="receiver" type="address" required>
+  The recipient address on the destination chain that will receive the bridged tokens.
+  
+  **Example**: `0x9876543210fedcba9876543210fedcba98765432`
+  
+  **Important**: Ensure this address is valid on the destination chain.
+</ParamField>
+
+<ParamField path="minAmount" type="uint256" required>
+  The minimum amount of tokens that must be received on the destination chain for the transaction to succeed.
+  
+  **Purpose**: Protects users from excessive slippage during the bridging process.
+  
+  **Example**: `1000000` (1 USDC with 6 decimals)
+  
+  **Calculation**: `desiredAmount * (1 - maxSlippagePercent)`
+</ParamField>
+
+<ParamField path="destinationChainId" type="uint256" required>
+  The chain ID of the destination blockchain.
+  
+  **Examples**:
+  - Ethereum Mainnet: `1`
+  - Polygon: `137`
+  - Arbitrum: `42161`
+  - Optimism: `10`
+  
+  **Reference**: See [chainlist.org](https://chainlist.org) for complete chain ID list.
+</ParamField>
+
+<ParamField path="hasSourceSwaps" type="bool" required>
+  Indicates whether token swaps are performed on the source chain before bridging.
+  
+  **Values**:
+  - `true`: Using `swapAndStartBridgeTokensVia{Bridge}` function
+  - `false`: Using `startBridgeTokensVia{Bridge}` function (direct bridge)
+  
+  **Purpose**: Helps with event filtering and analytics.
+</ParamField>
+
+<ParamField path="hasDestinationCall" type="bool" required>
+  Indicates whether there is a contract call to be executed on the destination chain after tokens arrive.
+  
+  **Values**:
+  - `true`: Tokens will be used to call a contract on the destination chain
+  - `false`: Tokens will be sent directly to the receiver address
+  
+  **Note**: Not all bridges support destination calls. Check bridge-specific documentation.
+</ParamField>
+
+## Usage Example
+
+### Direct Bridge (No Swaps)
+
+```typescript
+import { ILiFi } from '@lifi/contract-types';
+
+const bridgeData: ILiFi.BridgeDataStruct = {
+  transactionId: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+  bridge: 'across',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+  receiver: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+  minAmount: '995000', // 0.995 USDC (accounting for 0.5% slippage)
+  destinationChainId: '137', // Polygon
+  hasSourceSwaps: false,
+  hasDestinationCall: false,
+};
+
+// Use with a bridge facet
+await acrossFacet.startBridgeTokensViaAcross(bridgeData, acrossData);
+```
+
+### Swap and Bridge
+
+```typescript
+const bridgeData: ILiFi.BridgeDataStruct = {
+  transactionId: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+  bridge: 'stargate',
+  integrator: 'my-dapp',
+  referrer: '0x1234567890123456789012345678901234567890',
+  sendingAssetId: '0xdAC17F958D2ee523a2206206994597C13D831ec7', // USDT (after swap)
+  receiver: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+  minAmount: '1980000', // 1.98 USDT
+  destinationChainId: '42161', // Arbitrum
+  hasSourceSwaps: true, // Swapping ETH -> USDT first
+  hasDestinationCall: false,
+};
+
+// Swap ETH to USDT, then bridge USDT to Arbitrum
+await stargateFacet.swapAndStartBridgeTokensViaStargate(
+  bridgeData,
+  swapData,
+  stargateData
+);
+```
+
+## Related Events
+
+When a bridge transaction is initiated, the following event is emitted:
+
+```solidity
+event LiFiTransferStarted(
+  ILiFi.BridgeData bridgeData
+);
+```
+
+This event contains the complete `BridgeData` struct, allowing off-chain systems to track the transaction across chains.
+
+## Best Practices
+
+### Transaction ID Generation
+
+Generate unique transaction IDs to avoid conflicts:
+
+```typescript
+import { keccak256, toUtf8Bytes } from 'ethers/lib/utils';
+
+const transactionId = keccak256(
+  toUtf8Bytes(
+    `${userAddress}-${Date.now()}-${Math.random()}`
+  )
+);
+```
+
+### Slippage Calculation
+
+Always calculate `minAmount` with appropriate slippage tolerance:
+
+```typescript
+const calculateMinAmount = (
+  amount: bigint,
+  slippagePercent: number
+): bigint => {
+  const slippageBps = Math.floor(slippagePercent * 100);
+  return (amount * BigInt(10000 - slippageBps)) / BigInt(10000);
+};
+
+// Example: 1% slippage on 1000 USDC
+const minAmount = calculateMinAmount(1000000000n, 1.0);
+// Result: 990000000n (990 USDC)
+```
+
+### Validating Receiver Address
+
+Ensure the receiver address is valid for the destination chain:
+
+```typescript
+import { isAddress } from 'ethers/lib/utils';
+
+if (!isAddress(receiverAddress)) {
+  throw new Error('Invalid receiver address');
+}
+```
+
+## Common Patterns
+
+### Same Address Across Chains
+
+Often, users want to receive tokens at the same address they're sending from:
+
+```typescript
+const bridgeData: ILiFi.BridgeDataStruct = {
+  // ... other fields
+  receiver: await signer.getAddress(), // Same as sender
+};
+```
+
+### Multi-Step Transactions
+
+For complex transactions involving swaps and bridges:
+
+```typescript
+// Step 1: User has ETH
+// Step 2: Swap ETH -> USDC (handled by swapData)
+// Step 3: Bridge USDC to Polygon (handled by bridgeData)
+
+const bridgeData: ILiFi.BridgeDataStruct = {
+  // ... other fields
+  sendingAssetId: usdcAddress, // Final token being bridged
+  hasSourceSwaps: true, // Indicates swap happens first
+};
+```

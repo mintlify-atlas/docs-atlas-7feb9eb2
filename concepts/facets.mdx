@@ -1,0 +1,461 @@
+---
+title: "Facets"
+description: "Understanding facets, how they're organized, and the different facet categories in LiFi contracts"
+---
+
+## What are Facets?
+
+Facets are modular smart contracts that implement specific functionality within the LiFi Diamond architecture. Each facet is a separate contract that contains a focused set of functions, and all facets share the same storage through the central Diamond contract.
+
+Think of facets as "plug-in modules" that can be added, removed, or upgraded independently without affecting the rest of the system.
+
+## How Facets Are Organized
+
+### Naming Convention
+
+All facets follow a consistent naming pattern:
+
+- **Bridge Facets**: `{BridgeName}Facet` (e.g., `AcrossFacet`, `StargateFacet`)
+- **Utility Facets**: `{Function}Facet` (e.g., `GenericSwapFacet`, `WithdrawFacet`)
+- **Diamond Facets**: Standard Diamond pattern facets (`DiamondCutFacet`, `DiamondLoupeFacet`)
+
+### Function Organization
+
+Each facet typically provides:
+
+1. **Primary functions**: Core functionality (e.g., `startBridgeTokensVia{Bridge}`)
+2. **Alternative functions**: Variants with different capabilities (e.g., `swapAndStartBridgeTokensVia{Bridge}`)
+3. **Helper functions**: Internal utilities (if public)
+
+### Storage Pattern
+
+Facets use the Diamond Storage pattern to avoid storage collisions:
+
+```solidity
+// Each facet defines its own storage struct
+library LibDiamond {
+  bytes32 constant DIAMOND_STORAGE_POSITION = 
+    keccak256("diamond.standard.diamond.storage");
+    
+  struct DiamondStorage {
+    // Facet-specific state variables
+    mapping(bytes4 => address) facetAddressAndSelectorPosition;
+    address contractOwner;
+  }
+  
+  function diamondStorage() 
+    internal 
+    pure 
+    returns (DiamondStorage storage ds) 
+  {
+    bytes32 position = DIAMOND_STORAGE_POSITION;
+    assembly {
+      ds.slot := position
+    }
+  }
+}
+```
+
+## Facet Categories
+
+### 1. Bridge Facets
+
+Bridge facets integrate with cross-chain bridge protocols to enable token transfers between blockchains.
+
+#### Common Bridge Facets
+
+**Layer 2 & Optimistic Rollup Bridges**
+- `ArbitrumBridgeFacet`: Native Arbitrum bridge integration
+- `OptimismBridgeFacet`: Native Optimism bridge integration
+- `PolygonBridgeFacet`: Polygon PoS bridge integration
+
+**Third-Party Bridge Protocols**
+- `AcrossFacet`: Across Protocol integration (v1)
+- `AcrossFacetV3`: Across Protocol v3
+- `AcrossFacetV4`: Across Protocol v4
+- `StargateFacetV2`: Stargate v2 bridge
+- `HopFacet`: Hop Protocol bridge
+- `CBridgeFacet`: Celer cBridge integration
+- `AllBridgeFacet`: AllBridge integration
+- `OmniBridgeFacet`: xDai OmniBridge
+
+**Specialized Bridges**
+- `ChainflipFacet`: Chainflip cross-chain swaps
+- `MayanFacet`: Mayan Finance bridge
+- `SquidFacet`: Squid Router integration
+- `SymbiosisFacet`: Symbiosis Protocol
+- `DeBridgeDlnFacet`: deBridge DLN integration
+- `RelayFacet`: Relay Protocol integration
+
+#### Bridge Facet Pattern
+
+All bridge facets follow a similar structure:
+
+```typescript
+interface BridgeFacet {
+  // Direct bridge (no swaps)
+  function startBridgeTokensVia{Bridge}(
+    ILiFi.BridgeData calldata bridgeData,
+    {Bridge}Data calldata {bridge}Data
+  ) external payable;
+  
+  // Swap then bridge
+  function swapAndStartBridgeTokensVia{Bridge}(
+    ILiFi.BridgeData calldata bridgeData,
+    LibSwap.SwapData[] calldata swapData,
+    {Bridge}Data calldata {bridge}Data
+  ) external payable;
+}
+```
+
+**Example: AcrossFacet**
+
+```typescript
+// AcrossFacet interface
+export interface AcrossFacet {
+  startBridgeTokensViaAcross(
+    bridgeData: ILiFi.BridgeDataStruct,
+    acrossData: AcrossFacet.AcrossDataStruct
+  ): Promise<ContractTransaction>;
+  
+  swapAndStartBridgeTokensViaAcross(
+    bridgeData: ILiFi.BridgeDataStruct,
+    swapData: LibSwap.SwapDataStruct[],
+    acrossData: AcrossFacet.AcrossDataStruct
+  ): Promise<ContractTransaction>;
+}
+
+// Bridge-specific data structure
+export type AcrossDataStruct = {
+  relayerFeePct: BigNumberish;
+  quoteTimestamp: BigNumberish;
+  message: BytesLike;
+  maxCount: BigNumberish;
+};
+```
+
+### 2. Swap Facets
+
+Swap facets provide DEX aggregation and token swapping capabilities.
+
+#### Available Swap Facets
+
+- **`GenericSwapFacet`**: Generic DEX integration supporting any whitelisted DEX
+- **`GenericSwapFacetV3`**: Enhanced version with additional features
+
+#### Swap Facet Functions
+
+```typescript
+interface GenericSwapFacet {
+  // Execute token swaps
+  swapTokensGeneric(
+    transactionId: BytesLike,
+    integrator: string,
+    referrer: string,
+    receiver: string,
+    minAmount: BigNumberish,
+    swapData: LibSwap.SwapDataStruct[]
+  ): Promise<ContractTransaction>;
+}
+```
+
+### 3. Utility Facets
+
+Utility facets provide auxiliary functions for contract management and operations.
+
+#### Core Utility Facets
+
+**Access Control & Management**
+- `OwnershipFacet`: Contract ownership management
+  - `transferOwnership(address newOwner)`
+  - `confirmOwnershipTransfer()`
+  - `cancelOwnershipTransfer()`
+  - `owner()` - Get current owner
+
+- `AccessManagerFacet`: Fine-grained access control
+- `WhitelistManagerFacet`: Manage whitelisted contracts and addresses
+
+**Asset Management**
+- `WithdrawFacet`: Emergency token withdrawal
+  - `withdraw(address token, address to, uint256 amount)`
+  - `withdrawNative(address to, uint256 amount)`
+
+**Verification & Security**
+- `CalldataVerificationFacet`: Verify transaction calldata
+- `EmergencyPauseFacet`: Emergency pause functionality
+
+**Protocol Integration**
+- `PeripheryRegistryFacet`: Manage peripheral contract registrations
+
+#### Example: WithdrawFacet
+
+```typescript
+export interface WithdrawFacet {
+  // Withdraw ERC20 tokens
+  withdraw(
+    assetId: string,
+    receiver: string,
+    amount: BigNumberish
+  ): Promise<ContractTransaction>;
+  
+  // Withdraw native assets (ETH, MATIC, etc.)
+  withdrawNative(
+    receiver: string,
+    amount: BigNumberish  
+  ): Promise<ContractTransaction>;
+}
+```
+
+### 4. Diamond Standard Facets
+
+These facets implement the core EIP-2535 Diamond Standard functionality.
+
+#### DiamondCutFacet
+
+Enables upgrading the Diamond by adding, replacing, or removing facets.
+
+```typescript
+export interface DiamondCutFacet {
+  // Modify diamond facets
+  diamondCut(
+    facetCut: LibDiamond.FacetCutStruct[],
+    init: string,
+    calldata: BytesLike
+  ): Promise<ContractTransaction>;
+}
+
+// FacetCut structure
+export type FacetCutStruct = {
+  facetAddress: string;           // Address of the facet
+  action: BigNumberish;           // 0=Add, 1=Replace, 2=Remove  
+  functionSelectors: BytesLike[]; // Function selectors to modify
+};
+```
+
+**Actions**:
+- `0` (Add): Add new functions from a facet
+- `1` (Replace): Replace existing functions with new implementation
+- `2` (Remove): Remove functions from the Diamond
+
+#### DiamondLoupeFacet
+
+Provides introspection functions to query the Diamond's facet configuration.
+
+```typescript
+export interface DiamondLoupeFacet {
+  // Get all facets and their function selectors
+  facets(): Promise<IDiamondLoupe.FacetStructOutput[]>;
+  
+  // Get all function selectors for a facet
+  facetFunctionSelectors(facet: string): Promise<string[]>;
+  
+  // Get all facet addresses
+  facetAddresses(): Promise<string[]>;
+  
+  // Get the facet address for a function selector
+  facetAddress(functionSelector: BytesLike): Promise<string>;
+  
+  // Check interface support (ERC-165)
+  supportsInterface(interfaceId: BytesLike): Promise<boolean>;
+}
+```
+
+**Example Usage**:
+
+```typescript
+const loupeFacet = DiamondLoupeFacet__factory.connect(
+  diamondAddress,
+  provider
+);
+
+// Get all facets
+const facets = await loupeFacet.facets();
+for (const facet of facets) {
+  console.log(`Facet: ${facet.facetAddress}`);
+  console.log(`Functions: ${facet.functionSelectors.length}`);
+}
+
+// Find which facet implements a function
+const selector = '0x12345678';
+const facetAddr = await loupeFacet.facetAddress(selector);
+console.log(`Function ${selector} is in facet ${facetAddr}`);
+```
+
+## Working with Facets
+
+### Connecting to Facets
+
+All facets are accessed through the Diamond contract address:
+
+```typescript
+import { AcrossFacet__factory } from '@lifi/contract-types';
+import { ethers } from 'ethers';
+
+const diamondAddress = '0x1234...'; // LiFi Diamond address
+const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+const signer = provider.getSigner();
+
+// Connect to facet through Diamond address
+const acrossFacet = AcrossFacet__factory.connect(
+  diamondAddress,
+  signer
+);
+
+// Call facet function
+const tx = await acrossFacet.startBridgeTokensViaAcross(
+  bridgeData,
+  acrossData
+);
+```
+
+### Discovering Available Facets
+
+```typescript
+const loupeFacet = DiamondLoupeFacet__factory.connect(
+  diamondAddress,
+  provider
+);
+
+const allFacets = await loupeFacet.facets();
+
+for (const facet of allFacets) {
+  console.log(`\nFacet Address: ${facet.facetAddress}`);
+  console.log(`Function Count: ${facet.functionSelectors.length}`);
+  console.log('Selectors:', facet.functionSelectors);
+}
+```
+
+### Checking if a Facet Exists
+
+```typescript
+import { Interface } from 'ethers/lib/utils';
+
+const checkFacetExists = async (
+  facetInterface: Interface,
+  functionName: string
+): Promise<boolean> => {
+  const selector = facetInterface.getSighash(functionName);
+  const facetAddr = await loupeFacet.facetAddress(selector);
+  return facetAddr !== ethers.constants.AddressZero;
+};
+
+// Check if Across integration exists
+const acrossExists = await checkFacetExists(
+  AcrossFacet__factory.createInterface(),
+  'startBridgeTokensViaAcross'
+);
+```
+
+## Facet Versioning
+
+Some facets have multiple versions to support protocol upgrades:
+
+- `AcrossFacet` (v1) → `AcrossFacetV3` → `AcrossFacetV4`
+- `GenericSwapFacet` → `GenericSwapFacetV3`
+- `StargateFacet` → `StargateFacetV2`
+
+Always use the latest version unless you have a specific reason to use an older implementation.
+
+## Best Practices
+
+### 1. Use Typed Facet Interfaces
+
+Always use TypeScript types from the generated contract types:
+
+```typescript
+import { 
+  AcrossFacet,
+  AcrossFacet__factory,
+  ILiFi,
+  LibSwap
+} from '@lifi/contract-types';
+
+// Type-safe facet instance
+const facet: AcrossFacet = AcrossFacet__factory.connect(
+  diamondAddress,
+  signer
+);
+```
+
+### 2. Handle Facet Upgrades
+
+Build your integration to gracefully handle facet upgrades:
+
+```typescript
+const tryCallFacet = async () => {
+  try {
+    return await facet.startBridgeTokensViaAcross(...);
+  } catch (error) {
+    if (error.code === 'CALL_EXCEPTION') {
+      // Facet might have been removed or upgraded
+      console.error('Facet not available');
+    }
+    throw error;
+  }
+};
+```
+
+### 3. Verify Facet Availability
+
+For critical integrations, verify facets exist before calling:
+
+```typescript
+const selector = acrossFacet.interface.getSighash(
+  'startBridgeTokensViaAcross'
+);
+const facetAddr = await loupeFacet.facetAddress(selector);
+
+if (facetAddr === ethers.constants.AddressZero) {
+  throw new Error('AcrossFacet not installed');
+}
+```
+
+### 4. Monitor Facet Changes
+
+Subscribe to `DiamondCut` events to detect facet changes:
+
+```typescript
+const diamond = DiamondCutFacet__factory.connect(
+  diamondAddress,
+  provider
+);
+
+diamond.on('DiamondCut', (facetCut, init, calldata) => {
+  console.log('Diamond upgraded!');
+  console.log('Facet changes:', facetCut);
+  // Update your application state
+});
+```
+
+## Common Patterns
+
+### Multi-Facet Transactions
+
+Some workflows use multiple facets:
+
+```typescript
+// 1. Swap using GenericSwapFacet
+const swapFacet = GenericSwapFacet__factory.connect(
+  diamondAddress,
+  signer
+);
+await swapFacet.swapTokensGeneric(...);
+
+// 2. Then bridge using AcrossFacet  
+const bridgeFacet = AcrossFacet__factory.connect(
+  diamondAddress,
+  signer
+);
+await bridgeFacet.startBridgeTokensViaAcross(...);
+```
+
+Or combine into a single transaction:
+
+```typescript
+// Atomic swap + bridge
+await bridgeFacet.swapAndStartBridgeTokensViaAcross(
+  bridgeData,
+  swapData,
+  acrossData
+);
+```

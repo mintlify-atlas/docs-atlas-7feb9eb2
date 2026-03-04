@@ -1,0 +1,306 @@
+---
+title: "LibSwap Library"
+description: "Shared library for token swap operations across all LiFi bridge facets"
+---
+
+## Overview
+
+The `LibSwap` library provides core swap functionality used across all LiFi bridge facets. It defines the data structure for swap operations and emits events when swaps are executed.
+
+## SwapData Struct
+
+The `SwapDataStruct` contains all parameters needed to execute a token swap through a DEX or aggregator.
+
+### Type Signature
+
+```typescript
+export type SwapDataStruct = {
+  callTo: PromiseOrValue<string>;
+  approveTo: PromiseOrValue<string>;
+  sendingAssetId: PromiseOrValue<string>;
+  receivingAssetId: PromiseOrValue<string>;
+  fromAmount: PromiseOrValue<BigNumberish>;
+  callData: PromiseOrValue<BytesLike>;
+  requiresDeposit: PromiseOrValue<boolean>;
+};
+```
+
+### Fields
+
+<ParamField path="callTo" type="address" required>
+  The address of the DEX or swap contract to call for executing the swap
+</ParamField>
+
+<ParamField path="approveTo" type="address" required>
+  The address to approve for spending tokens (often different from callTo for aggregators)
+</ParamField>
+
+<ParamField path="sendingAssetId" type="address" required>
+  Contract address of the token being swapped from (use zero address for native tokens)
+</ParamField>
+
+<ParamField path="receivingAssetId" type="address" required>
+  Contract address of the token being swapped to (use zero address for native tokens)
+</ParamField>
+
+<ParamField path="fromAmount" type="uint256" required>
+  Amount of tokens to swap from
+</ParamField>
+
+<ParamField path="callData" type="bytes" required>
+  Encoded function call data for the swap contract
+</ParamField>
+
+<ParamField path="requiresDeposit" type="bool" required>
+  Whether the swap requires depositing native tokens (true for wrapping ETH to WETH)
+</ParamField>
+
+### Usage Example
+
+```typescript
+import { LibSwap } from './typechain-types';
+import { ethers } from 'ethers';
+
+// Example: Swap USDC to DAI on Uniswap V3
+const swapData: LibSwap.SwapDataStruct = {
+  callTo: '0xE592427A0AEce92De3Edee1F18E0157C05861564', // Uniswap V3 Router
+  approveTo: '0xE592427A0AEce92De3Edee1F18E0157C05861564',
+  sendingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+  receivingAssetId: '0x6B175474E89094C44Da98b954EedeAC495271d0F', // DAI
+  fromAmount: ethers.utils.parseUnits('100', 6), // 100 USDC
+  callData: uniswapCallData, // Encoded swap call
+  requiresDeposit: false
+};
+
+// Example: Wrap ETH to WETH
+const wrapEthSwap: LibSwap.SwapDataStruct = {
+  callTo: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH contract
+  approveTo: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+  sendingAssetId: ethers.constants.AddressZero, // Native ETH
+  receivingAssetId: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH
+  fromAmount: ethers.utils.parseEther('1'), // 1 ETH
+  callData: '0xd0e30db0', // deposit() function selector
+  requiresDeposit: true // Must send ETH with the call
+};
+
+// Example: Using a DEX aggregator like 1inch
+const oneInchSwap: LibSwap.SwapDataStruct = {
+  callTo: '0x1111111254EEB25477B68fb85Ed929f73A960582', // 1inch Router
+  approveTo: '0x1111111254EEB25477B68fb85Ed929f73A960582',
+  sendingAssetId: '0xdAC17F958D2ee523a2206206994597C13D831ec7', // USDT
+  receivingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+  fromAmount: ethers.utils.parseUnits('1000', 6), // 1000 USDT
+  callData: oneInchEncodedData, // 1inch API generated calldata
+  requiresDeposit: false
+};
+```
+
+## Events
+
+### AssetSwapped
+
+Emitted when a token swap is successfully executed through LibSwap.
+
+```typescript
+event AssetSwapped(
+  bytes32 transactionId,
+  address dex,
+  address fromAssetId,
+  address toAssetId,
+  uint256 fromAmount,
+  uint256 toAmount,
+  uint256 timestamp
+)
+```
+
+<ResponseField name="transactionId" type="bytes32">
+  The unique transaction identifier for tracking the swap
+</ResponseField>
+
+<ResponseField name="dex" type="address">
+  Address of the DEX or swap contract that executed the swap
+</ResponseField>
+
+<ResponseField name="fromAssetId" type="address">
+  Address of the token swapped from
+</ResponseField>
+
+<ResponseField name="toAssetId" type="address">
+  Address of the token swapped to
+</ResponseField>
+
+<ResponseField name="fromAmount" type="uint256">
+  Amount of tokens sent to the swap
+</ResponseField>
+
+<ResponseField name="toAmount" type="uint256">
+  Amount of tokens received from the swap
+</ResponseField>
+
+<ResponseField name="timestamp" type="uint256">
+  Block timestamp when the swap occurred
+</ResponseField>
+
+**Usage Example:**
+
+```typescript
+const libSwap = await ethers.getContractAt('LibSwap', contractAddress);
+
+// Listen for swap events
+libSwap.on('AssetSwapped', (
+  txId,
+  dex,
+  fromAsset,
+  toAsset,
+  fromAmount,
+  toAmount,
+  timestamp
+) => {
+  console.log('Swap executed:');
+  console.log(`  DEX: ${dex}`);
+  console.log(`  From: ${fromAmount} of ${fromAsset}`);
+  console.log(`  To: ${toAmount} of ${toAsset}`);
+  
+  // Calculate swap rate
+  const rate = toAmount.mul(ethers.constants.WeiPerEther).div(fromAmount);
+  console.log(`  Rate: ${ethers.utils.formatEther(rate)}`);
+});
+
+// Query historical swaps for a specific transaction
+const filter = libSwap.filters.AssetSwapped();
+const events = await libSwap.queryFilter(filter, fromBlock, toBlock);
+
+events.forEach(event => {
+  const { fromAssetId, toAssetId, fromAmount, toAmount } = event.args;
+  console.log(`Swapped ${fromAmount} ${fromAssetId} for ${toAmount} ${toAssetId}`);
+});
+```
+
+## Library Functions
+
+While the TypeScript definitions primarily expose the event interface, the underlying Solidity library provides internal functions used by facets:
+
+### Internal Functions (Solidity)
+
+```solidity
+// Execute a single swap
+function swap(
+  bytes32 transactionId,
+  SwapData calldata _swapData
+) internal returns (uint256)
+
+// Execute multiple swaps in sequence
+function executeSwaps(
+  bytes32 transactionId,
+  SwapData[] calldata _swapData
+) internal returns (uint256)
+```
+
+## Common Use Cases
+
+### Source Chain Swaps
+
+Swap tokens before bridging to ensure the correct asset is sent:
+
+```typescript
+// User has ETH but bridge requires USDC
+const sourceSwap: LibSwap.SwapDataStruct[] = [
+  {
+    callTo: uniswapRouter,
+    approveTo: uniswapRouter,
+    sendingAssetId: ethers.constants.AddressZero, // ETH
+    receivingAssetId: usdcAddress,
+    fromAmount: ethers.utils.parseEther('1'),
+    callData: swapEthForUsdcCalldata,
+    requiresDeposit: true
+  }
+];
+
+// Pass to bridge function
+await facet.swapAndStartBridgeTokensViaStargate(
+  bridgeData,
+  sourceSwap,
+  stargateData
+);
+```
+
+### Multi-Hop Swaps
+
+Chain multiple swaps for optimal routing:
+
+```typescript
+// Swap ETH -> WETH -> USDC for better rates
+const multiHopSwaps: LibSwap.SwapDataStruct[] = [
+  {
+    // First hop: ETH to WETH
+    callTo: wethAddress,
+    approveTo: wethAddress,
+    sendingAssetId: ethers.constants.AddressZero,
+    receivingAssetId: wethAddress,
+    fromAmount: ethers.utils.parseEther('10'),
+    callData: '0xd0e30db0', // deposit()
+    requiresDeposit: true
+  },
+  {
+    // Second hop: WETH to USDC
+    callTo: uniswapRouter,
+    approveTo: uniswapRouter,
+    sendingAssetId: wethAddress,
+    receivingAssetId: usdcAddress,
+    fromAmount: ethers.utils.parseEther('10'),
+    callData: wethToUsdcCalldata,
+    requiresDeposit: false
+  }
+];
+```
+
+### Aggregator Integration
+
+Integrate with DEX aggregators for best execution:
+
+```typescript
+// Get swap data from 1inch API
+const oneInchResponse = await fetch(
+  `https://api.1inch.io/v5.0/1/swap?fromTokenAddress=${tokenA}&toTokenAddress=${tokenB}&amount=${amount}&fromAddress=${diamondAddress}&slippage=1`
+);
+const swapData = await oneInchResponse.json();
+
+const aggregatorSwap: LibSwap.SwapDataStruct = {
+  callTo: swapData.tx.to,
+  approveTo: swapData.tx.to,
+  sendingAssetId: tokenA,
+  receivingAssetId: tokenB,
+  fromAmount: amount,
+  callData: swapData.tx.data,
+  requiresDeposit: false
+};
+```
+
+## Interface
+
+```typescript
+export interface LibSwap extends BaseContract {
+  interface: LibSwapInterface;
+  
+  filters: {
+    AssetSwapped(
+      transactionId?: null,
+      dex?: null,
+      fromAssetId?: null,
+      toAssetId?: null,
+      fromAmount?: null,
+      toAmount?: null,
+      timestamp?: null
+    ): AssetSwappedEventFilter;
+  };
+}
+```
+
+## Best Practices
+
+1. **Always validate swap data**: Ensure `callTo` and `approveTo` addresses are trusted contracts
+2. **Set appropriate slippage**: Build slippage protection into the `callData`
+3. **Handle native tokens correctly**: Use `AddressZero` for native tokens and set `requiresDeposit` appropriately
+4. **Monitor events**: Track `AssetSwapped` events to verify swap execution and amounts
+5. **Gas optimization**: Batch multiple swaps when possible instead of separate transactions
+6. **Security**: Never accept arbitrary swap data from untrusted sources

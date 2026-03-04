@@ -1,0 +1,217 @@
+---
+title: GenericSwapFacet
+description: Execute generic token swaps on the same chain without bridging
+---
+
+The `GenericSwapFacet` enables users to perform same-chain token swaps through any DEX or swap aggregator. This facet is useful when you need to swap tokens without bridging to another chain.
+
+## Functions
+
+### swapTokensGeneric
+
+Executes one or more token swaps and transfers the result to a receiver.
+
+```typescript
+function swapTokensGeneric(
+  _transactionId: BytesLike,
+  _integrator: string,
+  _referrer: string,
+  _receiver: string,
+  _minAmount: BigNumberish,
+  _swapData: LibSwap.SwapDataStruct[]
+): Promise<ContractTransaction>
+```
+
+<ParamField path="_transactionId" type="bytes32" required>
+  Unique identifier for this transaction
+</ParamField>
+
+<ParamField path="_integrator" type="string" required>
+  Name or identifier of the integrator
+</ParamField>
+
+<ParamField path="_referrer" type="string" required>
+  Referrer address or identifier
+</ParamField>
+
+<ParamField path="_receiver" type="address" required>
+  Address that will receive the swapped tokens
+</ParamField>
+
+<ParamField path="_minAmount" type="uint256" required>
+  Minimum amount of tokens expected after all swaps (slippage protection)
+</ParamField>
+
+<ParamField path="_swapData" type="LibSwap.SwapData[]" required>
+  Array of swap data structures defining the swap operations to execute
+</ParamField>
+
+## Data Structures
+
+### LibSwap.SwapData
+
+Defines a single swap operation.
+
+<ParamField path="callTo" type="address" required>
+  The DEX or swap contract to call
+</ParamField>
+
+<ParamField path="approveTo" type="address" required>
+  The address to approve for spending tokens (usually the same as callTo)
+</ParamField>
+
+<ParamField path="sendingAssetId" type="address" required>
+  Address of the token being sold (use zero address for native token)
+</ParamField>
+
+<ParamField path="receivingAssetId" type="address" required>
+  Address of the token being bought (use zero address for native token)
+</ParamField>
+
+<ParamField path="fromAmount" type="uint256" required>
+  Amount of sendingAssetId to swap
+</ParamField>
+
+<ParamField path="callData" type="bytes" required>
+  Encoded function call data for the swap
+</ParamField>
+
+<ParamField path="requiresDeposit" type="bool" required>
+  Whether the contract should hold the tokens before swapping
+</ParamField>
+
+## Events
+
+### LiFiSwappedGeneric
+
+Emitted when a generic swap is executed.
+
+<ParamField path="transactionId" type="bytes32">
+  The transaction identifier
+</ParamField>
+
+<ParamField path="integrator" type="string">
+  The integrator name
+</ParamField>
+
+<ParamField path="referrer" type="string">
+  The referrer identifier
+</ParamField>
+
+<ParamField path="fromAssetId" type="address">
+  Token being sold
+</ParamField>
+
+<ParamField path="toAssetId" type="address">
+  Token being bought
+</ParamField>
+
+<ParamField path="fromAmount" type="uint256">
+  Amount sold
+</ParamField>
+
+<ParamField path="toAmount" type="uint256">
+  Amount received
+</ParamField>
+
+### LiFiGenericSwapCompleted
+
+Emitted when all swaps are completed and tokens are transferred to receiver.
+
+<ParamField path="transactionId" type="bytes32">
+  The transaction identifier
+</ParamField>
+
+<ParamField path="integrator" type="string">
+  The integrator name
+</ParamField>
+
+<ParamField path="referrer" type="string">
+  The referrer identifier
+</ParamField>
+
+<ParamField path="receiver" type="address">
+  Address receiving the final tokens
+</ParamField>
+
+<ParamField path="fromAssetId" type="address">
+  Initial token
+</ParamField>
+
+<ParamField path="toAssetId" type="address">
+  Final token
+</ParamField>
+
+<ParamField path="fromAmount" type="uint256">
+  Initial amount
+</ParamField>
+
+<ParamField path="toAmount" type="uint256">
+  Final amount received
+</ParamField>
+
+### AssetSwapped
+
+Emitted for each individual swap in the swap array.
+
+<ParamField path="transactionId" type="bytes32">
+  The transaction identifier
+</ParamField>
+
+<ParamField path="dex" type="address">
+  The DEX contract used
+</ParamField>
+
+<ParamField path="fromAssetId" type="address">
+  Token being sold
+</ParamField>
+
+<ParamField path="toAssetId" type="address">
+  Token being bought
+</ParamField>
+
+<ParamField path="fromAmount" type="uint256">
+  Amount sold
+</ParamField>
+
+<ParamField path="toAmount" type="uint256">
+  Amount received
+</ParamField>
+
+<ParamField path="timestamp" type="uint256">
+  Block timestamp
+</ParamField>
+
+## Usage Example
+
+```typescript
+import { GenericSwapFacet__factory } from '@lifi/contract-types';
+import { ethers } from 'ethers';
+
+const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+const signer = provider.getSigner();
+const facet = GenericSwapFacet__factory.connect(DIAMOND_ADDRESS, signer);
+
+const swapData = [
+  {
+    callTo: '0xDEX_ADDRESS',
+    approveTo: '0xDEX_ADDRESS',
+    sendingAssetId: '0xUSDC_ADDRESS',
+    receivingAssetId: '0xUSDT_ADDRESS',
+    fromAmount: ethers.utils.parseUnits('100', 6),
+    callData: '0x...', // Encoded swap call
+    requiresDeposit: true
+  }
+];
+
+const tx = await facet.swapTokensGeneric(
+  ethers.utils.randomBytes(32),
+  'MyDApp',
+  '0xREFERRER_ADDRESS',
+  '0xRECEIVER_ADDRESS',
+  ethers.utils.parseUnits('99', 6), // Min 99 USDT
+  swapData
+);
+
+await tx.wait();
+```

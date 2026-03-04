@@ -1,80 +1,376 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Execute your first cross-chain bridge transaction using LiFi Contract Types
 ---
 
-## Get started in three steps
+## Overview
 
-Get your documentation site running locally and make your first customization.
+This guide will walk you through executing a complete cross-chain bridge transaction using LiFi Contract Types with the Across Protocol integration.
 
-### Step 1: Set up your local environment
+## Prerequisites
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+Before starting, ensure you have:
+
+- Node.js 16+ installed
+- A basic understanding of ethers.js
+- Access to an Ethereum RPC provider (Infura, Alchemy, etc.)
+- A wallet with some ETH for gas fees
+
+## Installation
+
+First, install the required packages:
+
+<CodeGroup>
+```bash npm
+npm install lifi-contract-typings ethers
+```
+
+```bash yarn
+yarn add lifi-contract-typings ethers
+```
+
+```bash pnpm
+pnpm add lifi-contract-typings ethers
+```
+</CodeGroup>
+
+## Complete Example
+
+Here's a complete working example that bridges USDC from Ethereum to Polygon using Across Protocol:
+
+```typescript
+import { ethers } from 'ethers';
+import { 
+  AcrossFacet__factory, 
+  ILiFi,
+  AcrossFacet 
+} from 'lifi-contract-typings';
+
+// Configuration
+const LIFI_DIAMOND_ADDRESS = '0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE';
+const USDC_ADDRESS = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'; // Ethereum USDC
+const RPC_URL = 'https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY';
+
+async function bridgeUSDCToPolygon() {
+  // Setup provider and signer
+  const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+  const wallet = new ethers.Wallet('YOUR_PRIVATE_KEY', provider);
+  
+  // Connect to LiFi Diamond contract with AcrossFacet interface
+  const acrossFacet = AcrossFacet__factory.connect(
+    LIFI_DIAMOND_ADDRESS,
+    wallet
+  );
+  
+  // Prepare bridge data
+  const bridgeData: ILiFi.BridgeDataStruct = {
+    transactionId: ethers.utils.formatBytes32String(
+      `lifi-tx-${Date.now()}`
+    ),
+    bridge: 'across',
+    integrator: 'my-dapp',
+    referrer: ethers.constants.AddressZero,
+    sendingAssetId: USDC_ADDRESS,
+    receiver: wallet.address, // Receive on same address
+    minAmount: ethers.utils.parseUnits('100', 6), // 100 USDC (6 decimals)
+    destinationChainId: 137, // Polygon
+    hasSourceSwaps: false,
+    hasDestinationCall: false,
+  };
+  
+  // Prepare Across-specific data
+  const acrossData: AcrossFacet.AcrossDataStruct = {
+    relayerFeePct: ethers.BigNumber.from('10000000000000000'), // 1% fee
+    quoteTimestamp: Math.floor(Date.now() / 1000),
+    message: '0x',
+    maxCount: ethers.constants.MaxUint256,
+  };
+  
+  // Approve USDC spending (if not already approved)
+  const usdcContract = new ethers.Contract(
+    USDC_ADDRESS,
+    ['function approve(address spender, uint256 amount) returns (bool)'],
+    wallet
+  );
+  
+  console.log('Approving USDC...');
+  const approveTx = await usdcContract.approve(
+    LIFI_DIAMOND_ADDRESS,
+    bridgeData.minAmount
+  );
+  await approveTx.wait();
+  console.log('USDC approved!');
+  
+  // Execute the bridge transaction
+  console.log('Starting bridge transaction...');
+  const tx = await acrossFacet.startBridgeTokensViaAcross(
+    bridgeData,
+    acrossData
+  );
+  
+  console.log('Transaction submitted:', tx.hash);
+  
+  // Wait for confirmation
+  const receipt = await tx.wait();
+  console.log('Bridge transaction confirmed!');
+  console.log('Transaction receipt:', receipt.transactionHash);
+  
+  return receipt;
+}
+
+// Execute
+bridgeUSDCToPolygon()
+  .then(() => console.log('Bridge completed successfully!'))
+  .catch(console.error);
+```
+
+## Step-by-Step Breakdown
+
+Let's break down the key parts:
+
+<Steps>
+  <Step title="Connect to the Contract">
+    Use the factory to create a type-safe contract instance:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```typescript
+    const acrossFacet = AcrossFacet__factory.connect(
+      LIFI_DIAMOND_ADDRESS,
+      wallet
+    );
+    ```
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    This gives you a fully typed contract with autocomplete for all methods.
+  </Step>
+  
+  <Step title="Prepare Bridge Data">
+    Create the `BridgeDataStruct` with all required parameters:
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```typescript
+    const bridgeData: ILiFi.BridgeDataStruct = {
+      transactionId: ethers.utils.formatBytes32String("unique-id"),
+      bridge: "across",
+      integrator: "my-dapp",
+      referrer: ethers.constants.AddressZero,
+      sendingAssetId: USDC_ADDRESS,
+      receiver: wallet.address,
+      minAmount: ethers.utils.parseUnits("100", 6),
+      destinationChainId: 137,
+      hasSourceSwaps: false,
+      hasDestinationCall: false,
+    };
+    ```
+    
+    <Note>
+      The `transactionId` should be unique for each transaction. Use it to track your bridges.
+    </Note>
+  </Step>
+  
+  <Step title="Prepare Protocol-Specific Data">
+    Each bridge protocol requires specific parameters. For Across:
+    
+    ```typescript
+    const acrossData: AcrossFacet.AcrossDataStruct = {
+      relayerFeePct: ethers.BigNumber.from("10000000000000000"), // 1%
+      quoteTimestamp: Math.floor(Date.now() / 1000),
+      message: "0x",
+      maxCount: ethers.constants.MaxUint256,
+    };
+    ```
+  </Step>
+  
+  <Step title="Approve Token Spending">
+    Before bridging, approve the LiFi Diamond to spend your tokens:
+    
+    ```typescript
+    await usdcContract.approve(
+      LIFI_DIAMOND_ADDRESS,
+      bridgeData.minAmount
+    );
+    ```
+  </Step>
+  
+  <Step title="Execute Bridge Transaction">
+    Call the bridge method with your prepared data:
+    
+    ```typescript
+    const tx = await acrossFacet.startBridgeTokensViaAcross(
+      bridgeData,
+      acrossData
+    );
+    await tx.wait();
+    ```
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+## Listening to Events
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+Monitor your bridge transaction with type-safe event listeners:
 
-### Step 3: Go live
+```typescript
+import { ILiFi } from 'lifi-contract-typings';
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+// Listen for transfer started events
+acrossFacet.on(
+  'LiFiTransferStarted',
+  (bridgeData: ILiFi.BridgeDataStructOutput) => {
+    console.log('Transfer started!');
+    console.log('Transaction ID:', bridgeData.transactionId);
+    console.log('Destination Chain:', bridgeData.destinationChainId.toString());
+    console.log('Amount:', bridgeData.minAmount.toString());
+  }
+);
 
-## Next steps
+// Listen for transfer completed events
+acrossFacet.on(
+  'LiFiTransferCompleted',
+  (transactionId, receivingAssetId, receiver, amount, timestamp) => {
+    console.log('Transfer completed!');
+    console.log('Amount received:', amount.toString());
+  }
+);
+```
 
-Now that you have your docs running, explore these key features:
+## Bridging with Source Swaps
+
+You can swap tokens before bridging using the `LibSwap.SwapDataStruct`:
+
+```typescript
+import { LibSwap } from 'lifi-contract-typings';
+
+const swapData: LibSwap.SwapDataStruct[] = [
+  {
+    callTo: '0x...', // DEX router address
+    approveTo: '0x...', // Address to approve
+    sendingAssetId: '0x...', // ETH address
+    receivingAssetId: USDC_ADDRESS,
+    fromAmount: ethers.utils.parseEther('1'),
+    callData: '0x...', // Encoded swap call
+    requiresDeposit: true,
+  },
+];
+
+// Update bridge data
+bridgeData.hasSourceSwaps = true;
+
+// Call the swap+bridge method
+const tx = await acrossFacet.swapAndStartBridgeTokensViaAcross(
+  bridgeData,
+  swapData,
+  acrossData
+);
+```
+
+## Common Bridge Integrations
+
+Here are the factory imports for other popular bridges:
+
+<CodeGroup>
+```typescript Stargate
+import { StargateFacetV2__factory } from 'lifi-contract-typings';
+
+const stargateFacet = StargateFacetV2__factory.connect(
+  LIFI_DIAMOND_ADDRESS,
+  signer
+);
+```
+
+```typescript Hop
+import { HopFacet__factory } from 'lifi-contract-typings';
+
+const hopFacet = HopFacet__factory.connect(
+  LIFI_DIAMOND_ADDRESS,
+  signer
+);
+```
+
+```typescript cBridge
+import { CBridgeFacet__factory } from 'lifi-contract-typings';
+
+const cBridgeFacet = CBridgeFacet__factory.connect(
+  LIFI_DIAMOND_ADDRESS,
+  signer
+);
+```
+
+```typescript Squid
+import { SquidFacet__factory } from 'lifi-contract-typings';
+
+const squidFacet = SquidFacet__factory.connect(
+  LIFI_DIAMOND_ADDRESS,
+  signer
+);
+```
+</CodeGroup>
+
+## Error Handling
+
+Always wrap your calls in try-catch blocks:
+
+```typescript
+try {
+  const tx = await acrossFacet.startBridgeTokensViaAcross(
+    bridgeData,
+    acrossData
+  );
+  await tx.wait();
+} catch (error) {
+  if (error.code === 'INSUFFICIENT_FUNDS') {
+    console.error('Not enough ETH for gas');
+  } else if (error.code === 'UNPREDICTABLE_GAS_LIMIT') {
+    console.error('Transaction would fail - check approvals and balances');
+  } else {
+    console.error('Bridge failed:', error.message);
+  }
+}
+```
+
+## Testing
+
+For testing, use a local fork or testnet:
+
+```typescript
+import { ethers } from 'hardhat';
+
+// Use Hardhat's network fork
+const provider = ethers.provider;
+const [signer] = await ethers.getSigners();
+
+const acrossFacet = AcrossFacet__factory.connect(
+  LIFI_DIAMOND_ADDRESS,
+  signer
+);
+```
+
+<Warning>
+  Never commit private keys to version control. Use environment variables:
+  
+  ```typescript
+  const wallet = new ethers.Wallet(process.env.PRIVATE_KEY!, provider);
+  ```
+</Warning>
+
+## Next Steps
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Core Concepts" icon="book" href="/concepts/overview">
+    Learn about BridgeData, SwapData, and other key types
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/core/ilifi">
+    Explore all available contracts and methods
+  </Card>
+  
+  <Card title="Examples" icon="flask" href="/guides/bridge-integration">
+    Browse more examples for different use cases
+  </Card>
+  
+  <Card title="LiFi SDK" icon="cube" href="https://docs.li.fi">
+    Use the higher-level LiFi SDK for easier integration
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Resources
+
+- [LiFi Diamond Addresses](https://docs.li.fi/integrate-li.fi-smart-contracts/deployed-contracts)
+- [Ethers.js Documentation](https://docs.ethers.org/v5/)
+- [LiFi Smart Contracts](https://github.com/lifinance/contracts)

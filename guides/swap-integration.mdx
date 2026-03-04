@@ -1,0 +1,454 @@
+---
+title: DEX Swap Integration
+description: Learn how to integrate decentralized exchange swaps using GenericSwapFacet
+---
+
+# DEX Swap Integration
+
+The `GenericSwapFacet` provides a flexible interface for executing token swaps through any DEX or aggregator on the same chain.
+
+## Overview
+
+GenericSwapFacet supports:
+- Single or multi-hop swaps
+- Any DEX (Uniswap, SushiSwap, Curve, etc.)
+- DEX aggregators (1inch, 0x, Paraswap)
+- ERC20 and native token swaps
+- Slippage protection
+
+## Basic Setup
+
+```typescript
+import { ethers } from 'ethers';
+import { 
+  GenericSwapFacet__factory,
+  type LibSwap 
+} from '@lifi/contract-types';
+
+// Initialize
+const provider = new ethers.providers.Web3Provider(window.ethereum);
+const signer = provider.getSigner();
+
+const LIFI_DIAMOND = '0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE';
+const swapFacet = GenericSwapFacet__factory.connect(LIFI_DIAMOND, signer);
+```
+
+## Swap Data Structure
+
+Each swap operation is defined by a `SwapData` struct:
+
+```typescript
+interface SwapDataStruct {
+  callTo: string;           // DEX contract address
+  approveTo: string;        // Address to approve tokens to
+  sendingAssetId: string;   // Input token address (0x0 for native)
+  receivingAssetId: string; // Output token address (0x0 for native)
+  fromAmount: BigNumber;    // Input amount
+  callData: string;         // Encoded DEX function call
+  requiresDeposit: boolean; // Whether to transfer tokens before call
+}
+```
+
+## Simple Token Swap
+
+<Steps>
+
+### 1. Prepare Token Approval
+
+```typescript
+import { ERC20__factory } from '@lifi/contract-types';
+
+const tokenIn = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'; // USDC
+const amount = ethers.utils.parseUnits('100', 6);
+
+const token = ERC20__factory.connect(tokenIn, signer);
+const approveTx = await token.approve(LIFI_DIAMOND, amount);
+await approveTx.wait();
+```
+
+### 2. Get DEX Calldata
+
+Generate the swap calldata for your chosen DEX:
+
+```typescript
+// Example: Uniswap V2 Router
+const UNISWAP_ROUTER = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D';
+
+const uniswapInterface = new ethers.utils.Interface([
+  'function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] path, address to, uint deadline)'
+]);
+
+const tokenOut = '0x6B175474E89094C44Da98b954EedeAC495271d0F'; // DAI
+const path = [tokenIn, tokenOut];
+const deadline = Math.floor(Date.now() / 1000) + 60 * 20; // 20 min
+
+const swapCalldata = uniswapInterface.encodeFunctionData(
+  'swapExactTokensForTokens',
+  [
+    ethers.utils.parseUnits('100', 6),  // 100 USDC
+    ethers.utils.parseUnits('95', 18),  // Min 95 DAI
+    path,
+    LIFI_DIAMOND,  // Recipient (important!)
+    deadline
+  ]
+);
+```
+
+<Warning>
+Always set the recipient address to the LiFi Diamond address, not the user's address. The Diamond will handle forwarding tokens to the final receiver.
+</Warning>
+
+### 3. Build Swap Data
+
+```typescript
+const swapData: LibSwap.SwapDataStruct = {
+  callTo: UNISWAP_ROUTER,
+  approveTo: UNISWAP_ROUTER,
+  sendingAssetId: tokenIn,
+  receivingAssetId: tokenOut,
+  fromAmount: ethers.utils.parseUnits('100', 6),
+  callData: swapCalldata,
+  requiresDeposit: true  // Transfer tokens to Diamond first
+};
+```
+
+### 4. Execute Swap
+
+```typescript
+const transactionId = ethers.utils.randomBytes(32);
+const receiver = await signer.getAddress();
+
+const tx = await swapFacet.swapTokensGeneric(
+  transactionId,
+  'my-dapp',                              // Integrator name
+  '',                                     // Referrer (optional)
+  receiver,                               // Recipient address
+  ethers.utils.parseUnits('95', 18),      // Minimum output amount
+  [swapData]                              // Array of swap operations
+);
+
+const receipt = await tx.wait();
+console.log('Swap completed in block:', receipt.blockNumber);
+```
+
+</Steps>
+
+## Swapping Native Tokens
+
+### ETH to Token
+
+```typescript
+const WETH = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2';
+const tokenOut = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'; // USDC
+
+const swapInterface = new ethers.utils.Interface([
+  'function swapExactETHForTokens(uint amountOutMin, address[] path, address to, uint deadline)'
+]);
+
+const swapCalldata = swapInterface.encodeFunctionData(
+  'swapExactETHForTokens',
+  [
+    ethers.utils.parseUnits('2900', 6),  // Min USDC out
+    [WETH, tokenOut],
+    LIFI_DIAMOND,
+    Math.floor(Date.now() / 1000) + 60 * 20
+  ]
+);
+
+const swapData: LibSwap.SwapDataStruct = {
+  callTo: UNISWAP_ROUTER,
+  approveTo: UNISWAP_ROUTER,
+  sendingAssetId: ethers.constants.AddressZero,  // Native ETH
+  receivingAssetId: tokenOut,
+  fromAmount: ethers.utils.parseEther('1'),
+  callData: swapCalldata,
+  requiresDeposit: false  // Native tokens sent with transaction
+};
+
+const tx = await swapFacet.swapTokensGeneric(
+  transactionId,
+  'my-dapp',
+  '',
+  receiver,
+  ethers.utils.parseUnits('2900', 6),
+  [swapData],
+  { value: ethers.utils.parseEther('1') }  // Send ETH with transaction
+);
+```
+
+### Token to ETH
+
+```typescript
+const tokenIn = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'; // USDC
+const WETH = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2';
+
+const swapInterface = new ethers.utils.Interface([
+  'function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] path, address to, uint deadline)'
+]);
+
+const swapCalldata = swapInterface.encodeFunctionData(
+  'swapExactTokensForETH',
+  [
+    ethers.utils.parseUnits('3000', 6),   // 3000 USDC
+    ethers.utils.parseEther('0.9'),       // Min 0.9 ETH
+    [tokenIn, WETH],
+    LIFI_DIAMOND,
+    Math.floor(Date.now() / 1000) + 60 * 20
+  ]
+);
+
+const swapData: LibSwap.SwapDataStruct = {
+  callTo: UNISWAP_ROUTER,
+  approveTo: UNISWAP_ROUTER,
+  sendingAssetId: tokenIn,
+  receivingAssetId: ethers.constants.AddressZero,  // Native ETH
+  fromAmount: ethers.utils.parseUnits('3000', 6),
+  callData: swapCalldata,
+  requiresDeposit: true
+};
+
+// Approve USDC first
+const token = ERC20__factory.connect(tokenIn, signer);
+await (await token.approve(LIFI_DIAMOND, swapData.fromAmount)).wait();
+
+const tx = await swapFacet.swapTokensGeneric(
+  transactionId,
+  'my-dapp',
+  '',
+  receiver,
+  ethers.utils.parseEther('0.9'),
+  [swapData]
+);
+```
+
+## Multi-Hop Swaps
+
+Execute multiple swaps in sequence:
+
+```typescript
+// Swap USDC -> WETH -> DAI
+const swaps: LibSwap.SwapDataStruct[] = [
+  {
+    // First swap: USDC -> WETH
+    callTo: UNISWAP_ROUTER,
+    approveTo: UNISWAP_ROUTER,
+    sendingAssetId: USDC,
+    receivingAssetId: WETH,
+    fromAmount: ethers.utils.parseUnits('1000', 6),
+    callData: uniswapCalldata1,
+    requiresDeposit: true
+  },
+  {
+    // Second swap: WETH -> DAI
+    callTo: SUSHISWAP_ROUTER,
+    approveTo: SUSHISWAP_ROUTER,
+    sendingAssetId: WETH,
+    receivingAssetId: DAI,
+    fromAmount: ethers.utils.parseEther('0.3'),  // Expected WETH from first swap
+    callData: sushiswapCalldata,
+    requiresDeposit: true
+  }
+];
+
+const tx = await swapFacet.swapTokensGeneric(
+  transactionId,
+  'my-dapp',
+  '',
+  receiver,
+  ethers.utils.parseUnits('950', 18),  // Minimum final DAI output
+  swaps
+);
+```
+
+<Note>
+The `minAmount` parameter applies to the final output amount after all swaps are complete. This provides cumulative slippage protection.
+</Note>
+
+## Using DEX Aggregators
+
+Integrate with DEX aggregators like 1inch:
+
+```typescript
+// Get quote from 1inch API
+const response = await fetch(
+  `https://api.1inch.dev/swap/v5.2/1/swap?src=${tokenIn}&dst=${tokenOut}&amount=${amount}&from=${LIFI_DIAMOND}&slippage=1`
+);
+const quote = await response.json();
+
+// Use 1inch calldata directly
+const swapData: LibSwap.SwapDataStruct = {
+  callTo: quote.tx.to,
+  approveTo: quote.tx.to,
+  sendingAssetId: tokenIn,
+  receivingAssetId: tokenOut,
+  fromAmount: ethers.BigNumber.from(amount),
+  callData: quote.tx.data,
+  requiresDeposit: true
+};
+
+const tx = await swapFacet.swapTokensGeneric(
+  transactionId,
+  'my-dapp',
+  '',
+  receiver,
+  ethers.BigNumber.from(quote.toAmount).mul(99).div(100),  // 1% slippage
+  [swapData]
+);
+```
+
+## Event Monitoring
+
+Listen for swap completion events:
+
+```typescript
+// Listen for LiFiSwappedGeneric event
+const filter = swapFacet.filters.LiFiSwappedGeneric();
+
+swapFacet.on(filter, (
+  transactionId,
+  integrator,
+  referrer,
+  fromAssetId,
+  toAssetId,
+  fromAmount,
+  toAmount,
+  event
+) => {
+  console.log('Swap completed:', {
+    transactionId: ethers.utils.hexlify(transactionId),
+    from: fromAssetId,
+    to: toAssetId,
+    amountIn: fromAmount.toString(),
+    amountOut: toAmount.toString(),
+    txHash: event.transactionHash
+  });
+});
+
+// Also listen for the completion event
+const completionFilter = swapFacet.filters.LiFiGenericSwapCompleted();
+
+swapFacet.on(completionFilter, (
+  transactionId,
+  integrator,
+  referrer,
+  receiver,
+  fromAssetId,
+  toAssetId,
+  fromAmount,
+  toAmount,
+  event
+) => {
+  console.log('Swap finalized:', {
+    receiver,
+    amountReceived: toAmount.toString()
+  });
+});
+```
+
+## Error Handling
+
+```typescript
+try {
+  const tx = await swapFacet.swapTokensGeneric(
+    transactionId,
+    integrator,
+    referrer,
+    receiver,
+    minAmount,
+    swapData
+  );
+  await tx.wait();
+} catch (error: any) {
+  if (error.errorName === 'CumulativeSlippageTooHigh') {
+    const decoded = error.errorArgs;
+    console.error(`Slippage too high: expected ${decoded.minAmount}, got ${decoded.receivedAmount}`);
+  } else if (error.errorName === 'InvalidAmount') {
+    console.error('Invalid swap amount');
+  } else if (error.errorName === 'NoSwapDataProvided') {
+    console.error('No swap data provided');
+  } else if (error.errorName === 'InvalidReceiver') {
+    console.error('Invalid receiver address');
+  } else {
+    console.error('Swap failed:', error.message);
+  }
+}
+```
+
+## Complete Swap Helper
+
+```typescript
+import { ethers } from 'ethers';
+import { GenericSwapFacet__factory, ERC20__factory } from '@lifi/contract-types';
+
+class SwapHelper {
+  private swapFacet: GenericSwapFacet;
+  private signer: ethers.Signer;
+  
+  constructor(diamondAddress: string, signer: ethers.Signer) {
+    this.swapFacet = GenericSwapFacet__factory.connect(diamondAddress, signer);
+    this.signer = signer;
+  }
+  
+  async executeSwap(
+    tokenIn: string,
+    tokenOut: string,
+    amountIn: string,
+    minAmountOut: string,
+    dexAddress: string,
+    swapCalldata: string
+  ) {
+    const receiver = await this.signer.getAddress();
+    
+    // Approve if ERC20
+    if (tokenIn !== ethers.constants.AddressZero) {
+      const token = ERC20__factory.connect(tokenIn, this.signer);
+      const allowance = await token.allowance(receiver, this.swapFacet.address);
+      
+      if (allowance.lt(amountIn)) {
+        const approveTx = await token.approve(
+          this.swapFacet.address,
+          ethers.constants.MaxUint256
+        );
+        await approveTx.wait();
+      }
+    }
+    
+    const swapData = {
+      callTo: dexAddress,
+      approveTo: dexAddress,
+      sendingAssetId: tokenIn,
+      receivingAssetId: tokenOut,
+      fromAmount: ethers.BigNumber.from(amountIn),
+      callData: swapCalldata,
+      requiresDeposit: tokenIn !== ethers.constants.AddressZero
+    };
+    
+    const tx = await this.swapFacet.swapTokensGeneric(
+      ethers.utils.randomBytes(32),
+      'my-dapp',
+      '',
+      receiver,
+      ethers.BigNumber.from(minAmountOut),
+      [swapData],
+      tokenIn === ethers.constants.AddressZero ? { value: amountIn } : {}
+    );
+    
+    return tx.wait();
+  }
+}
+```
+
+## Best Practices
+
+1. **Always set appropriate slippage** - Use minAmount to protect against front-running
+2. **Approve once** - Use `MaxUint256` for approvals to save gas on subsequent swaps
+3. **Validate DEX calldata** - Ensure recipient is set to LIFI_DIAMOND
+4. **Monitor events** - Listen for completion events to track swap status
+5. **Handle errors** - Check for slippage and amount errors
+6. **Test thoroughly** - Verify swaps on testnet before production
+
+## Next Steps
+
+- [Bridge Integration](/guides/bridge-integration) - Combine swaps with bridges
+- [Event Handling](/guides/event-handling) - Advanced event monitoring
+- [Contract Reference](/api/swaps/generic-swap-facet) - Full GenericSwapFacet API

@@ -1,0 +1,251 @@
+---
+title: DiamondLoupeFacet
+description: Inspect and query diamond contract facets and functions
+---
+
+The `DiamondLoupeFacet` implements the EIP-2535 Diamond Standard's introspection interface, allowing you to query which facets and functions are available in the diamond contract.
+
+## Functions
+
+### facets
+
+Returns all facets and their function selectors.
+
+```typescript
+function facets(): Promise<IDiamondLoupe.FacetStruct[]>
+```
+
+Returns an array of Facet structs, each containing:
+- `facetAddress`: Address of the facet contract
+- `functionSelectors`: Array of function selectors in that facet
+
+### facetFunctionSelectors
+
+Returns all function selectors for a specific facet.
+
+```typescript
+function facetFunctionSelectors(_facet: string): Promise<string[]>
+```
+
+<ParamField path="_facet" type="address" required>
+  Address of the facet to query
+</ParamField>
+
+### facetAddresses
+
+Returns all facet addresses in the diamond.
+
+```typescript
+function facetAddresses(): Promise<string[]>
+```
+
+### facetAddress
+
+Returns the facet address for a given function selector.
+
+```typescript
+function facetAddress(_functionSelector: BytesLike): Promise<string>
+```
+
+<ParamField path="_functionSelector" type="bytes4" required>
+  Function selector to query
+</ParamField>
+
+### supportsInterface
+
+Checks if the diamond supports a given interface (EIP-165).
+
+```typescript
+function supportsInterface(_interfaceId: BytesLike): Promise<boolean>
+```
+
+<ParamField path="_interfaceId" type="bytes4" required>
+  Interface ID to check
+</ParamField>
+
+## Data Structures
+
+### IDiamondLoupe.Facet
+
+<ParamField path="facetAddress" type="address">
+  Address of the facet contract
+</ParamField>
+
+<ParamField path="functionSelectors" type="bytes4[]">
+  Array of function selectors provided by this facet
+</ParamField>
+
+## Usage Examples
+
+### List All Facets
+
+```typescript
+import { DiamondLoupeFacet__factory } from '@lifi/contract-types';
+import { ethers } from 'ethers';
+
+const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+const loupe = DiamondLoupeFacet__factory.connect(DIAMOND_ADDRESS, provider);
+
+// Get all facets
+const facets = await loupe.facets();
+
+for (const facet of facets) {
+  console.log('Facet:', facet.facetAddress);
+  console.log('Functions:', facet.functionSelectors.length);
+  
+  // Print each function selector
+  for (const selector of facet.functionSelectors) {
+    console.log('  -', selector);
+  }
+}
+```
+
+### Find Which Facet Implements a Function
+
+```typescript
+// Find which facet implements a specific function
+const selector = '0x12345678'; // Function selector
+const facetAddr = await loupe.facetAddress(selector);
+
+if (facetAddr === ethers.constants.AddressZero) {
+  console.log('Function not found in diamond');
+} else {
+  console.log('Function implemented by facet:', facetAddr);
+}
+```
+
+### Get All Functions for a Facet
+
+```typescript
+// Get all function selectors for a specific facet
+const facetAddress = '0xFACET_ADDRESS';
+const selectors = await loupe.facetFunctionSelectors(facetAddress);
+
+console.log(`Facet ${facetAddress} has ${selectors.length} functions:`);
+for (const selector of selectors) {
+  console.log('  -', selector);
+}
+```
+
+### List All Facet Addresses
+
+```typescript
+// Get all facet addresses
+const addresses = await loupe.facetAddresses();
+
+console.log('Diamond has', addresses.length, 'facets:');
+for (const addr of addresses) {
+  console.log('  -', addr);
+}
+```
+
+### Check Interface Support
+
+```typescript
+// Check if diamond supports specific interfaces
+const ERC165_INTERFACE_ID = '0x01ffc9a7';
+const DIAMOND_LOUPE_INTERFACE_ID = '0x48e2b093';
+
+const supportsERC165 = await loupe.supportsInterface(ERC165_INTERFACE_ID);
+const supportsDiamondLoupe = await loupe.supportsInterface(DIAMOND_LOUPE_INTERFACE_ID);
+
+console.log('Supports ERC165:', supportsERC165);
+console.log('Supports Diamond Loupe:', supportsDiamondLoupe);
+```
+
+### Build Function Registry
+
+```typescript
+// Build a complete registry of all functions in the diamond
+interface FunctionRegistry {
+  [selector: string]: {
+    facet: string;
+    signature?: string;
+  };
+}
+
+const registry: FunctionRegistry = {};
+const facets = await loupe.facets();
+
+for (const facet of facets) {
+  for (const selector of facet.functionSelectors) {
+    registry[selector] = {
+      facet: facet.facetAddress
+    };
+  }
+}
+
+console.log('Function registry:', registry);
+```
+
+### Verify Diamond Configuration
+
+```typescript
+// Verify that expected facets are present
+const expectedFacets = [
+  '0xDIAMOND_CUT_FACET',
+  '0xDIAMOND_LOUPE_FACET',
+  '0xOWNERSHIP_FACET'
+];
+
+const actualFacets = await loupe.facetAddresses();
+
+for (const expected of expectedFacets) {
+  const isPresent = actualFacets.includes(expected);
+  console.log(`${expected}: ${isPresent ? 'OK' : 'MISSING'}`);
+}
+```
+
+### Monitor Diamond State
+
+```typescript
+// Helper function to get diamond state
+async function getDiamondState() {
+  const facets = await loupe.facets();
+  
+  return {
+    facetCount: facets.length,
+    functionCount: facets.reduce(
+      (sum, f) => sum + f.functionSelectors.length,
+      0
+    ),
+    facets: facets.map(f => ({
+      address: f.facetAddress,
+      functions: f.functionSelectors.length
+    }))
+  };
+}
+
+const state = await getDiamondState();
+console.log('Diamond state:', state);
+```
+
+## Integration with Other Tools
+
+### Generate ABI
+
+```typescript
+// Generate a complete ABI for the diamond by combining facet ABIs
+import { Fragment, FunctionFragment, Interface } from '@ethersproject/abi';
+
+async function generateDiamondABI() {
+  const facets = await loupe.facets();
+  const allFragments: Fragment[] = [];
+  
+  for (const facet of facets) {
+    // Load facet ABI and add to combined ABI
+    const facetABI = await loadFacetABI(facet.facetAddress);
+    allFragments.push(...facetABI);
+  }
+  
+  return allFragments;
+}
+```
+
+## Use Cases
+
+1. **Verification**: Verify diamond configuration after deployment or upgrade
+2. **Documentation**: Generate documentation of available functions
+3. **Debugging**: Troubleshoot which facet implements a specific function
+4. **Monitoring**: Track changes to diamond structure over time
+5. **Integration**: Build tooling that adapts to diamond configuration

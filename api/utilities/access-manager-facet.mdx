@@ -1,0 +1,202 @@
+---
+title: AccessManagerFacet
+description: Manage method-level access control for contract functions
+---
+
+The `AccessManagerFacet` provides granular access control, allowing specific addresses to execute specific contract methods.
+
+## Functions
+
+### setCanExecute
+
+Sets whether an address can execute a specific method.
+
+```typescript
+function setCanExecute(
+  _selector: BytesLike,
+  _executor: string,
+  _canExecute: boolean
+): Promise<ContractTransaction>
+```
+
+<ParamField path="_selector" type="bytes4" required>
+  Function selector (first 4 bytes of function signature hash)
+</ParamField>
+
+<ParamField path="_executor" type="address" required>
+  Address to grant or revoke execution permission
+</ParamField>
+
+<ParamField path="_canExecute" type="bool" required>
+  True to grant permission, false to revoke
+</ParamField>
+
+### View Functions
+
+#### addressCanExecuteMethod
+
+Checks if an address can execute a specific method.
+
+```typescript
+function addressCanExecuteMethod(
+  _selector: BytesLike,
+  _executor: string
+): Promise<boolean>
+```
+
+<ParamField path="_selector" type="bytes4" required>
+  Function selector to check
+</ParamField>
+
+<ParamField path="_executor" type="address" required>
+  Address to check permissions for
+</ParamField>
+
+## Events
+
+### AccessGranted
+
+Emitted when an address is granted permission to execute a method.
+
+<ParamField path="account" type="address">
+  Address granted permission
+</ParamField>
+
+<ParamField path="method" type="bytes4">
+  Function selector granted
+</ParamField>
+
+### AccessRevoked
+
+Emitted when an address has permission revoked for a method.
+
+<ParamField path="account" type="address">
+  Address with revoked permission
+</ParamField>
+
+<ParamField path="method" type="bytes4">
+  Function selector revoked
+</ParamField>
+
+### ExecutionAllowed
+
+Emitted when execution is allowed (during permission check).
+
+<ParamField path="account" type="address">
+  Address attempting execution
+</ParamField>
+
+<ParamField path="method" type="bytes4">
+  Function selector being executed
+</ParamField>
+
+### ExecutionDenied
+
+Emitted when execution is denied (during permission check).
+
+<ParamField path="account" type="address">
+  Address attempting execution
+</ParamField>
+
+<ParamField path="method" type="bytes4">
+  Function selector being denied
+</ParamField>
+
+## Usage Example
+
+```typescript
+import { AccessManagerFacet__factory } from '@lifi/contract-types';
+import { ethers } from 'ethers';
+
+const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+const signer = provider.getSigner();
+const facet = AccessManagerFacet__factory.connect(DIAMOND_ADDRESS, signer);
+
+// Grant access to a specific method
+const methodSelector = '0x12345678'; // Function selector
+const executorAddress = '0xEXECUTOR_ADDRESS';
+
+const tx = await facet.setCanExecute(
+  methodSelector,
+  executorAddress,
+  true // Grant access
+);
+await tx.wait();
+
+// Check if address can execute
+const canExecute = await facet.addressCanExecuteMethod(
+  methodSelector,
+  executorAddress
+);
+console.log('Can execute:', canExecute);
+
+// Revoke access
+const revokeTx = await facet.setCanExecute(
+  methodSelector,
+  executorAddress,
+  false // Revoke access
+);
+await revokeTx.wait();
+```
+
+## Use Cases
+
+### Executor Authorization
+
+Grant specific addresses the ability to execute destination-side swaps:
+
+```typescript
+const swapAndExecuteSelector = '0x...'; // swapAndExecute selector
+const trustedExecutor = '0xTRUSTED_EXECUTOR';
+
+await facet.setCanExecute(
+  swapAndExecuteSelector,
+  trustedExecutor,
+  true
+);
+```
+
+### API Key Management
+
+Create API-key-like access for specific integrations:
+
+```typescript
+// Grant multiple addresses access to specific methods
+const addresses = ['0xAPI_KEY_1', '0xAPI_KEY_2', '0xAPI_KEY_3'];
+const selector = '0x...';
+
+for (const addr of addresses) {
+  await facet.setCanExecute(selector, addr, true);
+}
+```
+
+### Temporary Access
+
+Grant temporary access for specific operations:
+
+```typescript
+// Grant access
+await facet.setCanExecute(selector, tempAddress, true);
+
+// Perform operation
+await performOperation();
+
+// Revoke access
+await facet.setCanExecute(selector, tempAddress, false);
+```
+
+## Access Control Pattern
+
+The AccessManagerFacet is typically used in combination with modifiers in other facets:
+
+```solidity
+modifier onlyAuthorized() {
+    require(
+        accessManager.addressCanExecuteMethod(msg.sig, msg.sender),
+        "Unauthorized"
+    );
+    _;
+}
+```
+
+This allows fine-grained control over who can call specific functions, providing security beyond simple owner-based access control.

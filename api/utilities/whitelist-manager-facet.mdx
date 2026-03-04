@@ -1,0 +1,188 @@
+---
+title: WhitelistManagerFacet
+description: Manage whitelisted contract and function selector pairs
+---
+
+The `WhitelistManagerFacet` manages which contracts and function selectors are whitelisted for use in swap operations. This provides security by restricting which DEXs and functions can be called.
+
+## Functions
+
+### setContractSelectorWhitelist
+
+Sets the whitelist status for a contract-selector pair.
+
+```typescript
+function setContractSelectorWhitelist(
+  _contract: string,
+  _selector: BytesLike,
+  _whitelisted: boolean
+): Promise<ContractTransaction>
+```
+
+<ParamField path="_contract" type="address" required>
+  Address of the contract
+</ParamField>
+
+<ParamField path="_selector" type="bytes4" required>
+  Function selector (first 4 bytes of function signature hash)
+</ParamField>
+
+<ParamField path="_whitelisted" type="bool" required>
+  True to whitelist, false to remove from whitelist
+</ParamField>
+
+### batchSetContractSelectorWhitelist
+
+Sets the whitelist status for multiple contract-selector pairs at once.
+
+```typescript
+function batchSetContractSelectorWhitelist(
+  _contracts: string[],
+  _selectors: BytesLike[],
+  _whitelisted: boolean
+): Promise<ContractTransaction>
+```
+
+<ParamField path="_contracts" type="address[]" required>
+  Array of contract addresses
+</ParamField>
+
+<ParamField path="_selectors" type="bytes4[]" required>
+  Array of function selectors (must match length of _contracts)
+</ParamField>
+
+<ParamField path="_whitelisted" type="bool" required>
+  True to whitelist all pairs, false to remove all from whitelist
+</ParamField>
+
+### View Functions
+
+#### isContractSelectorWhitelisted
+
+Checks if a contract-selector pair is whitelisted.
+
+```typescript
+function isContractSelectorWhitelisted(
+  _contract: string,
+  _selector: BytesLike
+): Promise<boolean>
+```
+
+<ParamField path="_contract" type="address" required>
+  Address of the contract
+</ParamField>
+
+<ParamField path="_selector" type="bytes4" required>
+  Function selector to check
+</ParamField>
+
+#### getWhitelistedSelectorsForContract
+
+Gets all whitelisted selectors for a specific contract.
+
+```typescript
+function getWhitelistedSelectorsForContract(
+  _contract: string
+): Promise<string[]>
+```
+
+<ParamField path="_contract" type="address" required>
+  Address of the contract
+</ParamField>
+
+#### getAllContractSelectorPairs
+
+Gets all whitelisted contract-selector pairs.
+
+```typescript
+function getAllContractSelectorPairs(): Promise<{
+  contracts: string[];
+  selectors: string[][];
+}>
+```
+
+Returns two parallel arrays:
+- `contracts`: Array of contract addresses
+- `selectors`: Array of selector arrays (one array per contract)
+
+## Events
+
+### ContractSelectorWhitelistChanged
+
+Emitted when a contract-selector pair whitelist status changes.
+
+<ParamField path="contractAddress" type="address">
+  Address of the contract
+</ParamField>
+
+<ParamField path="selector" type="bytes4">
+  Function selector
+</ParamField>
+
+<ParamField path="whitelisted" type="bool">
+  New whitelist status
+</ParamField>
+
+## Usage Example
+
+```typescript
+import { WhitelistManagerFacet__factory } from '@lifi/contract-types';
+import { ethers } from 'ethers';
+
+const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+const signer = provider.getSigner();
+const facet = WhitelistManagerFacet__factory.connect(DIAMOND_ADDRESS, signer);
+
+// Whitelist Uniswap V2 swapExactTokensForTokens function
+const uniV2Router = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D';
+const swapSelector = '0x38ed1739'; // swapExactTokensForTokens selector
+
+const tx = await facet.setContractSelectorWhitelist(
+  uniV2Router,
+  swapSelector,
+  true
+);
+await tx.wait();
+
+// Check if whitelisted
+const isWhitelisted = await facet.isContractSelectorWhitelisted(
+  uniV2Router,
+  swapSelector
+);
+console.log('Is whitelisted:', isWhitelisted);
+
+// Batch whitelist multiple DEX functions
+const contracts = [
+  '0xUNISWAP_V2_ROUTER',
+  '0xSUSHISWAP_ROUTER',
+  '0x1INCH_ROUTER'
+];
+
+const selectors = [
+  '0x38ed1739', // swapExactTokensForTokens
+  '0x38ed1739', // swapExactTokensForTokens
+  '0x7c025200'  // swap (1inch)
+];
+
+const batchTx = await facet.batchSetContractSelectorWhitelist(
+  contracts,
+  selectors,
+  true
+);
+await batchTx.wait();
+
+// Get all whitelisted selectors for a contract
+const whitelistedSelectors = await facet.getWhitelistedSelectorsForContract(
+  uniV2Router
+);
+console.log('Whitelisted selectors:', whitelistedSelectors);
+```
+
+## Security Considerations
+
+The whitelist mechanism is a critical security feature:
+
+- Only whitelisted contract-selector pairs can be called during swap operations
+- Prevents malicious contracts from being used in swaps
+- Allows protocol to maintain control over which DEXs and functions are supported
+- Access to whitelist management functions should be strictly controlled (typically owner-only)

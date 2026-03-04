@@ -1,0 +1,362 @@
+---
+title: "ILiFi Interface"
+description: "Core LiFi interface defining bridge data structures and events for cross-chain transfers"
+---
+
+## Overview
+
+The `ILiFi` interface is the foundational contract interface for the LiFi protocol. It defines the core data structures and events used throughout the protocol for cross-chain bridging and transfer operations.
+
+## BridgeData Struct
+
+The `BridgeDataStruct` contains all necessary information for executing a cross-chain bridge transaction.
+
+### Type Signature
+
+```typescript
+export type BridgeDataStruct = {
+  transactionId: PromiseOrValue<BytesLike>;
+  bridge: PromiseOrValue<string>;
+  integrator: PromiseOrValue<string>;
+  referrer: PromiseOrValue<string>;
+  sendingAssetId: PromiseOrValue<string>;
+  receiver: PromiseOrValue<string>;
+  minAmount: PromiseOrValue<BigNumberish>;
+  destinationChainId: PromiseOrValue<BigNumberish>;
+  hasSourceSwaps: PromiseOrValue<boolean>;
+  hasDestinationCall: PromiseOrValue<boolean>;
+};
+```
+
+### Fields
+
+<ParamField path="transactionId" type="bytes32" required>
+  Unique identifier for the transaction across the LiFi protocol
+</ParamField>
+
+<ParamField path="bridge" type="string" required>
+  Name of the bridge protocol being used (e.g., "stargate", "hop", "across")
+</ParamField>
+
+<ParamField path="integrator" type="string" required>
+  Address or identifier of the integrator using the LiFi protocol
+</ParamField>
+
+<ParamField path="referrer" type="string" required>
+  Address of the referrer for fee sharing purposes
+</ParamField>
+
+<ParamField path="sendingAssetId" type="address" required>
+  Contract address of the token being sent (use zero address for native tokens)
+</ParamField>
+
+<ParamField path="receiver" type="address" required>
+  Destination address that will receive the bridged assets
+</ParamField>
+
+<ParamField path="minAmount" type="uint256" required>
+  Minimum amount of tokens expected on the destination chain (for slippage protection)
+</ParamField>
+
+<ParamField path="destinationChainId" type="uint256" required>
+  Chain ID of the destination blockchain
+</ParamField>
+
+<ParamField path="hasSourceSwaps" type="bool" required>
+  Whether the transaction includes token swaps on the source chain before bridging
+</ParamField>
+
+<ParamField path="hasDestinationCall" type="bool" required>
+  Whether the transaction includes additional calls on the destination chain after bridging
+</ParamField>
+
+### Usage Example
+
+```typescript
+import { ILiFi } from './typechain-types';
+
+const bridgeData: ILiFi.BridgeDataStruct = {
+  transactionId: '0x1234...', // Unique transaction ID
+  bridge: 'stargate',
+  integrator: '0xIntegratorAddress',
+  referrer: '0xReferrerAddress',
+  sendingAssetId: '0xUSDCAddress', // USDC token
+  receiver: '0xReceiverAddress',
+  minAmount: ethers.utils.parseUnits('100', 6), // 100 USDC
+  destinationChainId: 137, // Polygon
+  hasSourceSwaps: true,
+  hasDestinationCall: false
+};
+```
+
+## Events
+
+### LiFiTransferStarted
+
+Emitted when a cross-chain transfer is initiated.
+
+```typescript
+event LiFiTransferStarted(tuple bridgeData)
+```
+
+<ResponseField name="bridgeData" type="BridgeDataStruct">
+  Complete bridge data for the initiated transfer
+</ResponseField>
+
+**Usage Example:**
+
+```typescript
+contract.on('LiFiTransferStarted', (bridgeData) => {
+  console.log('Transfer started:', bridgeData.transactionId);
+  console.log('Destination chain:', bridgeData.destinationChainId);
+});
+```
+
+### LiFiTransferCompleted
+
+Emitted when a cross-chain transfer completes successfully on the destination chain.
+
+```typescript
+event LiFiTransferCompleted(
+  bytes32 indexed transactionId,
+  address receivingAssetId,
+  address receiver,
+  uint256 amount,
+  uint256 timestamp
+)
+```
+
+<ResponseField name="transactionId" type="bytes32" indexed>
+  The unique transaction identifier
+</ResponseField>
+
+<ResponseField name="receivingAssetId" type="address">
+  Address of the token received on the destination chain
+</ResponseField>
+
+<ResponseField name="receiver" type="address">
+  Address that received the tokens
+</ResponseField>
+
+<ResponseField name="amount" type="uint256">
+  Amount of tokens received
+</ResponseField>
+
+<ResponseField name="timestamp" type="uint256">
+  Block timestamp when the transfer completed
+</ResponseField>
+
+**Usage Example:**
+
+```typescript
+const filter = contract.filters.LiFiTransferCompleted(transactionId);
+const events = await contract.queryFilter(filter);
+console.log('Transfer completed with amount:', events[0].args.amount);
+```
+
+### LiFiTransferRecovered
+
+Emitted when assets are recovered from a failed transfer.
+
+```typescript
+event LiFiTransferRecovered(
+  bytes32 indexed transactionId,
+  address receivingAssetId,
+  address receiver,
+  uint256 amount,
+  uint256 timestamp
+)
+```
+
+<ResponseField name="transactionId" type="bytes32" indexed>
+  The unique transaction identifier
+</ResponseField>
+
+<ResponseField name="receivingAssetId" type="address">
+  Address of the token being recovered
+</ResponseField>
+
+<ResponseField name="receiver" type="address">
+  Address receiving the recovered tokens
+</ResponseField>
+
+<ResponseField name="amount" type="uint256">
+  Amount of tokens recovered
+</ResponseField>
+
+<ResponseField name="timestamp" type="uint256">
+  Block timestamp when the recovery occurred
+</ResponseField>
+
+### LiFiSwappedGeneric
+
+Emitted when a token swap occurs as part of a LiFi transaction.
+
+```typescript
+event LiFiSwappedGeneric(
+  bytes32 indexed transactionId,
+  string integrator,
+  string referrer,
+  address fromAssetId,
+  address toAssetId,
+  uint256 fromAmount,
+  uint256 toAmount
+)
+```
+
+<ResponseField name="transactionId" type="bytes32" indexed>
+  The unique transaction identifier
+</ResponseField>
+
+<ResponseField name="integrator" type="string">
+  Integrator identifier
+</ResponseField>
+
+<ResponseField name="referrer" type="string">
+  Referrer identifier
+</ResponseField>
+
+<ResponseField name="fromAssetId" type="address">
+  Address of the token being swapped from
+</ResponseField>
+
+<ResponseField name="toAssetId" type="address">
+  Address of the token being swapped to
+</ResponseField>
+
+<ResponseField name="fromAmount" type="uint256">
+  Amount of tokens sent to the swap
+</ResponseField>
+
+<ResponseField name="toAmount" type="uint256">
+  Amount of tokens received from the swap
+</ResponseField>
+
+### LiFiGenericSwapCompleted
+
+Emitted when a generic swap completes, including receiver information.
+
+```typescript
+event LiFiGenericSwapCompleted(
+  bytes32 indexed transactionId,
+  string integrator,
+  string referrer,
+  address receiver,
+  address fromAssetId,
+  address toAssetId,
+  uint256 fromAmount,
+  uint256 toAmount
+)
+```
+
+<ResponseField name="transactionId" type="bytes32" indexed>
+  The unique transaction identifier
+</ResponseField>
+
+<ResponseField name="integrator" type="string">
+  Integrator identifier
+</ResponseField>
+
+<ResponseField name="referrer" type="string">
+  Referrer identifier
+</ResponseField>
+
+<ResponseField name="receiver" type="address">
+  Address that received the swapped tokens
+</ResponseField>
+
+<ResponseField name="fromAssetId" type="address">
+  Address of the token being swapped from
+</ResponseField>
+
+<ResponseField name="toAssetId" type="address">
+  Address of the token being swapped to
+</ResponseField>
+
+<ResponseField name="fromAmount" type="uint256">
+  Amount of tokens sent to the swap
+</ResponseField>
+
+<ResponseField name="toAmount" type="uint256">
+  Amount of tokens received from the swap
+</ResponseField>
+
+### BridgeToNonEVMChain
+
+Emitted when bridging to a non-EVM chain with a bytes receiver address.
+
+```typescript
+event BridgeToNonEVMChain(
+  bytes32 indexed transactionId,
+  uint256 indexed destinationChainId,
+  bytes receiver
+)
+```
+
+<ResponseField name="transactionId" type="bytes32" indexed>
+  The unique transaction identifier
+</ResponseField>
+
+<ResponseField name="destinationChainId" type="uint256" indexed>
+  Chain ID of the destination blockchain
+</ResponseField>
+
+<ResponseField name="receiver" type="bytes">
+  Receiver address in bytes format (for non-EVM addresses)
+</ResponseField>
+
+### BridgeToNonEVMChainBytes32
+
+Emitted when bridging to a non-EVM chain with a bytes32 receiver address.
+
+```typescript
+event BridgeToNonEVMChainBytes32(
+  bytes32 indexed transactionId,
+  uint256 indexed destinationChainId,
+  bytes32 receiver
+)
+```
+
+<ResponseField name="transactionId" type="bytes32" indexed>
+  The unique transaction identifier
+</ResponseField>
+
+<ResponseField name="destinationChainId" type="uint256" indexed>
+  Chain ID of the destination blockchain
+</ResponseField>
+
+<ResponseField name="receiver" type="bytes32">
+  Receiver address in bytes32 format (for chains like Solana)
+</ResponseField>
+
+**Usage Example:**
+
+```typescript
+// Listen for non-EVM chain bridges
+contract.on('BridgeToNonEVMChainBytes32', (txId, chainId, receiver) => {
+  console.log(`Bridge to chain ${chainId}`);
+  console.log(`Receiver: ${receiver}`);
+});
+```
+
+## Interface
+
+The `ILiFi` interface extends `BaseContract` from ethers and provides methods for querying events and managing listeners.
+
+```typescript
+export interface ILiFi extends BaseContract {
+  interface: ILiFiInterface;
+  
+  filters: {
+    LiFiTransferStarted(bridgeData?: null): LiFiTransferStartedEventFilter;
+    LiFiTransferCompleted(
+      transactionId?: PromiseOrValue<BytesLike> | null,
+      receivingAssetId?: null,
+      receiver?: null,
+      amount?: null,
+      timestamp?: null
+    ): LiFiTransferCompletedEventFilter;
+    // ... other event filters
+  };
+}
+```

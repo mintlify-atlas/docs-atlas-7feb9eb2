@@ -1,0 +1,160 @@
+---
+title: AllBridgeFacet
+description: Bridge tokens across chains using Allbridge
+---
+
+## Overview
+
+The `AllBridgeFacet` enables cross-chain token transfers using Allbridge, a cross-chain bridge supporting multiple blockchains including EVM and non-EVM chains.
+
+## Contract Interface
+
+### Functions
+
+#### startBridgeTokensViaAllBridge
+
+Bridges tokens to another chain using Allbridge.
+
+```typescript
+function startBridgeTokensViaAllBridge(
+  BridgeData _bridgeData,
+  AllBridgeData _allBridgeData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data containing transaction details
+</ParamField>
+
+<ParamField path="_allBridgeData" type="AllBridgeData">
+  Allbridge-specific bridging parameters
+  
+  <Expandable title="AllBridgeData fields">
+    <ParamField path="recipient" type="bytes32">Recipient address (supports non-EVM chains)</ParamField>
+    <ParamField path="fees" type="uint256">Bridge fees to pay</ParamField>
+    <ParamField path="receiveToken" type="bytes32">Token to receive on destination</ParamField>
+    <ParamField path="nonce" type="uint256">Unique nonce for the transfer</ParamField>
+    <ParamField path="messenger" type="uint8">Messenger protocol to use</ParamField>
+    <ParamField path="payFeeWithSendingAsset" type="bool">Whether to pay fees with sending asset</ParamField>
+  </Expandable>
+</ParamField>
+
+#### swapAndStartBridgeTokensViaAllBridge
+
+Performs a token swap on the source chain before bridging via Allbridge.
+
+```typescript
+function swapAndStartBridgeTokensViaAllBridge(
+  BridgeData _bridgeData,
+  SwapData[] _swapData,
+  AllBridgeData _allBridgeData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data
+</ParamField>
+
+<ParamField path="_swapData" type="SwapData[]">
+  Array of swap operations to execute before bridging
+</ParamField>
+
+<ParamField path="_allBridgeData" type="AllBridgeData">
+  Allbridge-specific parameters
+</ParamField>
+
+## Data Structures
+
+### AllBridgeData
+
+```typescript
+struct AllBridgeData {
+  bytes32 recipient;                  // Recipient address (supports non-EVM)
+  uint256 fees;                       // Bridge fees
+  bytes32 receiveToken;               // Token to receive
+  uint256 nonce;                      // Unique nonce
+  uint8 messenger;                    // Messenger protocol
+  bool payFeeWithSendingAsset;       // Pay fees with sending token
+}
+```
+
+## Usage Example
+
+```typescript
+import { AllBridgeFacet } from '@lifi/contract-types';
+
+const allBridgeFacet = AllBridgeFacet__factory.connect(facetAddress, signer);
+
+const bridgeData = {
+  transactionId: '0x...',
+  bridge: 'allbridge',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+  receiver: '0x...',
+  minAmount: ethers.utils.parseUnits('100', 6),
+  destinationChainId: 43114, // Avalanche
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+const allBridgeData = {
+  recipient: ethers.utils.hexZeroPad(bridgeData.receiver, 32),
+  fees: ethers.utils.parseEther('0.01'),
+  receiveToken: ethers.utils.hexZeroPad(
+    '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', // USDC on Avalanche
+    32
+  ),
+  nonce: Date.now(),
+  messenger: 1, // Primary messenger
+  payFeeWithSendingAsset: false
+};
+
+const tx = await allBridgeFacet.startBridgeTokensViaAllBridge(
+  bridgeData,
+  allBridgeData,
+  { value: allBridgeData.fees }
+);
+
+await tx.wait();
+```
+
+## Bridging to Non-EVM Chains
+
+Allbridge supports bridging to non-EVM chains like Solana:
+
+```typescript
+const allBridgeData = {
+  // Solana address as bytes32
+  recipient: ethers.utils.arrayify(
+    bs58.decode('7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU')
+  ),
+  fees: ethers.utils.parseEther('0.01'),
+  receiveToken: ethers.utils.hexZeroPad(
+    '0xTokenAddressOnSolana',
+    32
+  ),
+  nonce: Date.now(),
+  messenger: 1,
+  payFeeWithSendingAsset: false
+};
+```
+
+## Events
+
+- `LiFiTransferStarted(BridgeData bridgeData)`
+- `BridgeToNonEVMChain(bytes32 transactionId, uint256 destinationChainId, bytes receiver)` - For non-EVM transfers
+- `AssetSwapped` (when using swapAndStart variant)
+
+## Notes
+
+- Allbridge supports both EVM and non-EVM chains
+- The `recipient` field uses `bytes32` to support various address formats
+- Fees can be paid either in native tokens or the sending asset
+- Different messenger protocols may have different costs and speeds
+
+## See Also
+
+- [Allbridge Documentation](https://docs.allbridge.io/)
+- [BridgeData Reference](/concepts/bridge-data)
+- [SwapData Reference](/concepts/swap-data)

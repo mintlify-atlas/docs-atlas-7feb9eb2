@@ -1,0 +1,404 @@
+---
+title: Factory Usage
+description: Learn how to use contract factories to interact with LiFi contracts
+---
+
+This guide covers common patterns for using the TypeChain-generated factory classes to interact with LiFi contracts.
+
+## Connecting to Existing Contracts
+
+The most common use case is connecting to already-deployed contracts.
+
+### Basic Connection
+
+```typescript
+import { GenericSwapFacet__factory } from '@lifi/contract-types';
+import { ethers } from 'ethers';
+
+// Read-only connection with provider
+const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+const facet = GenericSwapFacet__factory.connect(
+  '0xDIAMOND_ADDRESS',
+  provider
+);
+
+// Now you can call view functions
+const result = await facet.someViewFunction();
+```
+
+### Connection with Signer
+
+```typescript
+// Read-write connection with signer
+const signer = provider.getSigner();
+const facet = GenericSwapFacet__factory.connect(
+  '0xDIAMOND_ADDRESS',
+  signer
+);
+
+// Now you can send transactions
+const tx = await facet.swapTokensGeneric(
+  transactionId,
+  integrator,
+  referrer,
+  receiver,
+  minAmount,
+  swapData
+);
+await tx.wait();
+```
+
+### Multiple Facets on Same Diamond
+
+```typescript
+import {
+  GenericSwapFacet__factory,
+  DiamondLoupeFacet__factory,
+  OwnershipFacet__factory
+} from '@lifi/contract-types';
+
+const DIAMOND_ADDRESS = '0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE';
+
+// Connect to multiple facets of the same diamond
+const genericSwap = GenericSwapFacet__factory.connect(DIAMOND_ADDRESS, signer);
+const loupe = DiamondLoupeFacet__factory.connect(DIAMOND_ADDRESS, provider);
+const ownership = OwnershipFacet__factory.connect(DIAMOND_ADDRESS, signer);
+
+// Use each facet for its specific functionality
+const owner = await ownership.owner();
+const facets = await loupe.facets();
+const swapTx = await genericSwap.swapTokensGeneric(...);
+```
+
+## Working with Events
+
+### Listening to Events
+
+```typescript
+const facet = GenericSwapFacet__factory.connect(address, provider);
+
+// Listen to specific event
+facet.on('LiFiSwappedGeneric', (
+  transactionId,
+  integrator,
+  referrer,
+  fromAssetId,
+  toAssetId,
+  fromAmount,
+  toAmount,
+  event
+) => {
+  console.log('Swap executed:', {
+    transactionId,
+    from: fromAssetId,
+    to: toAssetId,
+    amount: ethers.utils.formatUnits(toAmount, 18)
+  });
+});
+```
+
+### Filtering Events
+
+```typescript
+// Create event filter
+const filter = facet.filters.LiFiSwappedGeneric(
+  null, // transactionId
+  'MyIntegrator', // integrator
+  null, // referrer
+  null, // fromAssetId
+  null, // toAssetId
+  null, // fromAmount
+  null  // toAmount
+);
+
+// Query past events
+const events = await facet.queryFilter(filter, fromBlock, toBlock);
+
+for (const event of events) {
+  console.log('Event:', event.args);
+}
+```
+
+### Waiting for Specific Events
+
+```typescript
+// Send transaction
+const tx = await facet.swapTokensGeneric(...);
+
+// Wait for transaction and get events
+const receipt = await tx.wait();
+
+const swapEvents = receipt.events?.filter(
+  e => e.event === 'LiFiSwappedGeneric'
+);
+
+for (const event of swapEvents) {
+  console.log('Swap event:', event.args);
+}
+```
+
+## Encoding Function Calls
+
+### Encode Call Data
+
+```typescript
+const facet = GenericSwapFacet__factory.connect(address, signer);
+
+// Encode function call without sending transaction
+const calldata = facet.interface.encodeFunctionData('swapTokensGeneric', [
+  transactionId,
+  integrator,
+  referrer,
+  receiver,
+  minAmount,
+  swapData
+]);
+
+console.log('Encoded calldata:', calldata);
+```
+
+### Decode Call Data
+
+```typescript
+const decoded = facet.interface.decodeFunctionData(
+  'swapTokensGeneric',
+  calldata
+);
+
+console.log('Decoded parameters:', decoded);
+```
+
+### Get Function Selector
+
+```typescript
+const selector = facet.interface.getSighash('swapTokensGeneric');
+console.log('Function selector:', selector); // e.g., '0x12345678'
+```
+
+## Estimate Gas
+
+```typescript
+const facet = GenericSwapFacet__factory.connect(address, signer);
+
+// Estimate gas for transaction
+const gasEstimate = await facet.estimateGas.swapTokensGeneric(
+  transactionId,
+  integrator,
+  referrer,
+  receiver,
+  minAmount,
+  swapData,
+  { value: ethers.utils.parseEther('0.1') } // If payable
+);
+
+console.log('Estimated gas:', gasEstimate.toString());
+
+// Use estimate when sending transaction
+const tx = await facet.swapTokensGeneric(
+  transactionId,
+  integrator,
+  referrer,
+  receiver,
+  minAmount,
+  swapData,
+  {
+    gasLimit: gasEstimate.mul(120).div(100), // Add 20% buffer
+    value: ethers.utils.parseEther('0.1')
+  }
+);
+```
+
+## Call Static (Simulation)
+
+```typescript
+const facet = GenericSwapFacet__factory.connect(address, signer);
+
+// Simulate transaction without sending it
+try {
+  await facet.callStatic.swapTokensGeneric(
+    transactionId,
+    integrator,
+    referrer,
+    receiver,
+    minAmount,
+    swapData
+  );
+  console.log('Transaction would succeed');
+} catch (error) {
+  console.error('Transaction would fail:', error);
+}
+```
+
+## Accessing ABI and Bytecode
+
+### Get ABI
+
+```typescript
+import { GenericSwapFacet__factory } from '@lifi/contract-types';
+
+const abi = GenericSwapFacet__factory.abi;
+console.log('Contract ABI:', abi);
+
+// Save ABI to file
+import fs from 'fs';
+fs.writeFileSync(
+  'GenericSwapFacet.json',
+  JSON.stringify(abi, null, 2)
+);
+```
+
+### Get Bytecode
+
+```typescript
+const bytecode = GenericSwapFacet__factory.bytecode;
+console.log('Contract bytecode:', bytecode);
+```
+
+## Multi-Chain Usage
+
+```typescript
+const chains = {
+  ethereum: {
+    rpc: 'https://eth-mainnet.g.alchemy.com/v2/...',
+    diamond: '0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE'
+  },
+  polygon: {
+    rpc: 'https://polygon-mainnet.g.alchemy.com/v2/...',
+    diamond: '0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE'
+  },
+  arbitrum: {
+    rpc: 'https://arb-mainnet.g.alchemy.com/v2/...',
+    diamond: '0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE'
+  }
+};
+
+// Connect to same facet on multiple chains
+const connections = Object.entries(chains).map(([name, config]) => {
+  const provider = new ethers.providers.JsonRpcProvider(config.rpc);
+  const facet = GenericSwapFacet__factory.connect(config.diamond, provider);
+  return { name, facet };
+});
+
+// Query all chains in parallel
+const results = await Promise.all(
+  connections.map(async ({ name, facet }) => {
+    try {
+      // Call some view function
+      const data = await facet.someViewFunction();
+      return { name, data };
+    } catch (error) {
+      return { name, error };
+    }
+  })
+);
+```
+
+## Error Handling
+
+```typescript
+import { GenericSwapFacet__factory } from '@lifi/contract-types';
+
+const facet = GenericSwapFacet__factory.connect(address, signer);
+
+try {
+  const tx = await facet.swapTokensGeneric(
+    transactionId,
+    integrator,
+    referrer,
+    receiver,
+    minAmount,
+    swapData
+  );
+  
+  const receipt = await tx.wait();
+  console.log('Transaction successful:', receipt.transactionHash);
+  
+} catch (error: any) {
+  // Handle different error types
+  if (error.code === 'INSUFFICIENT_FUNDS') {
+    console.error('Insufficient funds for transaction');
+  } else if (error.code === 'UNPREDICTABLE_GAS_LIMIT') {
+    console.error('Transaction would fail, check parameters');
+  } else if (error.reason) {
+    console.error('Contract reverted:', error.reason);
+  } else {
+    console.error('Transaction failed:', error.message);
+  }
+}
+```
+
+## Advanced Patterns
+
+### Factory Helper Class
+
+```typescript
+import { Signer, providers } from 'ethers';
+import {
+  GenericSwapFacet,
+  GenericSwapFacet__factory,
+  DiamondLoupeFacet,
+  DiamondLoupeFacet__factory
+} from '@lifi/contract-types';
+
+class LiFiDiamond {
+  public genericSwap: GenericSwapFacet;
+  public loupe: DiamondLoupeFacet;
+  
+  constructor(
+    address: string,
+    signerOrProvider: Signer | providers.Provider
+  ) {
+    this.genericSwap = GenericSwapFacet__factory.connect(
+      address,
+      signerOrProvider
+    );
+    this.loupe = DiamondLoupeFacet__factory.connect(
+      address,
+      signerOrProvider
+    );
+  }
+  
+  async getFacets() {
+    return await this.loupe.facets();
+  }
+  
+  async performSwap(params: SwapParams) {
+    return await this.genericSwap.swapTokensGeneric(
+      params.transactionId,
+      params.integrator,
+      params.referrer,
+      params.receiver,
+      params.minAmount,
+      params.swapData
+    );
+  }
+}
+
+// Usage
+const diamond = new LiFiDiamond(DIAMOND_ADDRESS, signer);
+const facets = await diamond.getFacets();
+const tx = await diamond.performSwap(swapParams);
+```
+
+### Contract Verification Helper
+
+```typescript
+import { DiamondLoupeFacet__factory } from '@lifi/contract-types';
+
+async function verifyDiamondHasFacet(
+  diamondAddress: string,
+  facetAddress: string,
+  provider: providers.Provider
+): Promise<boolean> {
+  const loupe = DiamondLoupeFacet__factory.connect(diamondAddress, provider);
+  const facets = await loupe.facetAddresses();
+  return facets.map(f => f.toLowerCase()).includes(facetAddress.toLowerCase());
+}
+
+// Usage
+const hasGenericSwap = await verifyDiamondHasFacet(
+  DIAMOND_ADDRESS,
+  GENERIC_SWAP_FACET_ADDRESS,
+  provider
+);
+```

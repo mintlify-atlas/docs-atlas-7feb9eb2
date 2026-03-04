@@ -1,0 +1,256 @@
+---
+title: Executor
+description: Execute destination-side swaps and handle cross-chain token operations
+---
+
+The `Executor` contract handles destination-side operations for cross-chain transfers, including swapping received tokens and managing ERC20/ERC721/ERC1155 token receipts.
+
+## Functions
+
+### swapAndCompleteBridgeTokens
+
+Executes swaps on received bridge tokens and transfers them to the final receiver.
+
+```typescript
+function swapAndCompleteBridgeTokens(
+  _transactionId: BytesLike,
+  _swapData: LibSwap.SwapDataStruct[],
+  _transferredAssetId: string,
+  _receiver: string
+): Promise<ContractTransaction>
+```
+
+<ParamField path="_transactionId" type="bytes32" required>
+  Unique identifier for this transaction
+</ParamField>
+
+<ParamField path="_swapData" type="LibSwap.SwapData[]" required>
+  Array of swap operations to execute on the received tokens
+</ParamField>
+
+<ParamField path="_transferredAssetId" type="address" required>
+  Address of the token that was received from the bridge
+</ParamField>
+
+<ParamField path="_receiver" type="address" required>
+  Final recipient of the swapped tokens
+</ParamField>
+
+### swapAndExecute
+
+Executes swaps with a specific amount and transfers to receiver.
+
+```typescript
+function swapAndExecute(
+  _transactionId: BytesLike,
+  _swapData: LibSwap.SwapDataStruct[],
+  _transferredAssetId: string,
+  _receiver: string,
+  _amount: BigNumberish
+): Promise<ContractTransaction>
+```
+
+<ParamField path="_transactionId" type="bytes32" required>
+  Unique identifier for this transaction
+</ParamField>
+
+<ParamField path="_swapData" type="LibSwap.SwapData[]" required>
+  Array of swap operations to execute
+</ParamField>
+
+<ParamField path="_transferredAssetId" type="address" required>
+  Address of the token to swap
+</ParamField>
+
+<ParamField path="_receiver" type="address" required>
+  Final recipient of the swapped tokens
+</ParamField>
+
+<ParamField path="_amount" type="uint256" required>
+  Amount of tokens to swap
+</ParamField>
+
+### withdrawToken
+
+Withdraws tokens from the executor (owner only).
+
+```typescript
+function withdrawToken(
+  assetId: string,
+  receiver: string,
+  amount: BigNumberish
+): Promise<ContractTransaction>
+```
+
+<ParamField path="assetId" type="address" required>
+  Address of the token to withdraw (zero address for native token)
+</ParamField>
+
+<ParamField path="receiver" type="address" required>
+  Address to receive the withdrawn tokens
+</ParamField>
+
+<ParamField path="amount" type="uint256" required>
+  Amount to withdraw
+</ParamField>
+
+### Ownership Functions
+
+The Executor implements a two-step ownership transfer pattern:
+
+#### transferOwnership
+
+Initiates ownership transfer to a new address.
+
+```typescript
+function transferOwnership(_newOwner: string): Promise<ContractTransaction>
+```
+
+<ParamField path="_newOwner" type="address" required>
+  Address of the new owner
+</ParamField>
+
+#### confirmOwnershipTransfer
+
+Confirms the ownership transfer (must be called by pending owner).
+
+```typescript
+function confirmOwnershipTransfer(): Promise<ContractTransaction>
+```
+
+#### cancelOwnershipTransfer
+
+Cancels a pending ownership transfer (must be called by current owner).
+
+```typescript
+function cancelOwnershipTransfer(): Promise<ContractTransaction>
+```
+
+### View Functions
+
+#### owner
+
+Returns the current owner address.
+
+```typescript
+function owner(): Promise<string>
+```
+
+#### pendingOwner
+
+Returns the pending owner address (if any).
+
+```typescript
+function pendingOwner(): Promise<string>
+```
+
+#### erc20Proxy
+
+Returns the ERC20 proxy contract address.
+
+```typescript
+function erc20Proxy(): Promise<string>
+```
+
+#### supportsInterface
+
+Checks if a given interface is supported.
+
+```typescript
+function supportsInterface(interfaceId: BytesLike): Promise<boolean>
+```
+
+<ParamField path="interfaceId" type="bytes4" required>
+  The interface identifier to check
+</ParamField>
+
+### ERC Token Receivers
+
+The Executor implements handlers for receiving NFTs and multi-tokens:
+
+- `onERC721Received`: Handles ERC721 token receipts
+- `onERC1155Received`: Handles single ERC1155 token receipts  
+- `onERC1155BatchReceived`: Handles batch ERC1155 token receipts
+
+## Events
+
+### TokensWithdrawn
+
+Emitted when tokens are withdrawn from the executor.
+
+<ParamField path="assetId" type="address">
+  Address of the withdrawn token
+</ParamField>
+
+<ParamField path="receiver" type="address">
+  Address receiving the tokens
+</ParamField>
+
+<ParamField path="amount" type="uint256">
+  Amount withdrawn
+</ParamField>
+
+### ERC20ProxySet
+
+Emitted when the ERC20 proxy address is set.
+
+<ParamField path="proxy" type="address">
+  Address of the ERC20 proxy
+</ParamField>
+
+### OwnershipTransferRequested
+
+Emitted when ownership transfer is initiated.
+
+<ParamField path="_from" type="address">
+  Current owner address
+</ParamField>
+
+<ParamField path="_to" type="address">
+  Pending new owner address
+</ParamField>
+
+### OwnershipTransferred
+
+Emitted when ownership transfer is completed.
+
+<ParamField path="previousOwner" type="address">
+  Previous owner address
+</ParamField>
+
+<ParamField path="newOwner" type="address">
+  New owner address
+</ParamField>
+
+## Usage Example
+
+```typescript
+import { Executor__factory } from '@lifi/contract-types';
+import { ethers } from 'ethers';
+
+const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+const signer = provider.getSigner();
+const executor = Executor__factory.connect(EXECUTOR_ADDRESS, signer);
+
+// Execute destination swaps after bridge
+const swapData = [
+  {
+    callTo: '0xDEX_ADDRESS',
+    approveTo: '0xDEX_ADDRESS',
+    sendingAssetId: '0xUSDC_ADDRESS',
+    receivingAssetId: '0xDAI_ADDRESS',
+    fromAmount: ethers.utils.parseUnits('100', 6),
+    callData: '0x...', // Encoded swap call
+    requiresDeposit: true
+  }
+];
+
+const tx = await executor.swapAndCompleteBridgeTokens(
+  ethers.utils.randomBytes(32),
+  swapData,
+  '0xUSDC_ADDRESS',
+  '0xRECEIVER_ADDRESS'
+);
+
+await tx.wait();
+```

@@ -1,0 +1,233 @@
+---
+title: "LiFiDiamond Contract"
+description: "Main diamond proxy contract implementing the EIP-2535 Diamond Standard for LiFi protocol"
+---
+
+## Overview
+
+The `LiFiDiamond` contract is the main entry point for the LiFi protocol, implementing the EIP-2535 Diamond Standard. This pattern allows for a modular, upgradeable contract architecture where functionality is split across multiple facets that can be added, replaced, or removed.
+
+## Architecture
+
+The Diamond pattern provides:
+- **Modularity**: Functionality separated into independent facets
+- **Upgradeability**: Facets can be upgraded without changing the main contract address
+- **Unlimited Contract Size**: Bypass the 24KB contract size limit
+- **Shared Storage**: All facets share the same storage using diamond storage pattern
+
+## FacetCut Struct
+
+The `FacetCutStruct` defines operations for adding, replacing, or removing facets in the diamond.
+
+### Type Signature
+
+```typescript
+export type FacetCutStruct = {
+  facetAddress: PromiseOrValue<string>;
+  action: PromiseOrValue<BigNumberish>;
+  functionSelectors: PromiseOrValue<BytesLike>[];
+};
+```
+
+### Fields
+
+<ParamField path="facetAddress" type="address" required>
+  The address of the facet contract to add, replace, or remove
+</ParamField>
+
+<ParamField path="action" type="uint8" required>
+  The action to perform:
+  - `0`: Add new functions
+  - `1`: Replace existing functions
+  - `2`: Remove functions
+</ParamField>
+
+<ParamField path="functionSelectors" type="bytes4[]" required>
+  Array of function selectors to add, replace, or remove from the diamond
+</ParamField>
+
+### Usage Example
+
+```typescript
+import { LibDiamond } from './typechain-types';
+import { ethers } from 'ethers';
+
+// Example: Adding a new facet to the diamond
+const facetCut: LibDiamond.FacetCutStruct = {
+  facetAddress: '0xNewFacetAddress',
+  action: 0, // Add
+  functionSelectors: [
+    ethers.utils.id('swapTokens(address,address,uint256)').slice(0, 10),
+    ethers.utils.id('bridge(tuple)').slice(0, 10)
+  ]
+};
+
+// Example: Replacing functions in an existing facet
+const replaceFacetCut: LibDiamond.FacetCutStruct = {
+  facetAddress: '0xUpdatedFacetAddress',
+  action: 1, // Replace
+  functionSelectors: ['0x12345678', '0x87654321']
+};
+
+// Example: Removing functions
+const removeFacetCut: LibDiamond.FacetCutStruct = {
+  facetAddress: ethers.constants.AddressZero, // Zero address for removal
+  action: 2, // Remove
+  functionSelectors: ['0xabcdef12']
+};
+```
+
+## Events
+
+### DiamondCut
+
+Emitted when facets are added, replaced, or removed from the diamond.
+
+```typescript
+event DiamondCut(
+  tuple[] _diamondCut,
+  address _init,
+  bytes _calldata
+)
+```
+
+<ResponseField name="_diamondCut" type="FacetCutStruct[]">
+  Array of facet cut operations to perform
+</ResponseField>
+
+<ResponseField name="_init" type="address">
+  Address of the contract to call for initialization (use zero address if no initialization needed)
+</ResponseField>
+
+<ResponseField name="_calldata" type="bytes">
+  Calldata to send to the initialization contract
+</ResponseField>
+
+**Usage Example:**
+
+```typescript
+const diamond = await ethers.getContractAt('LiFiDiamond', diamondAddress);
+
+// Listen for diamond cut events
+diamond.on('DiamondCut', (cuts, initAddress, calldata) => {
+  console.log(`Diamond updated with ${cuts.length} facet changes`);
+  cuts.forEach((cut, i) => {
+    const action = ['Add', 'Replace', 'Remove'][cut.action];
+    console.log(`${i + 1}. ${action} ${cut.functionSelectors.length} functions`);
+  });
+});
+
+// Perform a diamond cut
+const tx = await diamond.diamondCut(
+  [facetCut],
+  ethers.constants.AddressZero, // No initialization
+  '0x' // No calldata
+);
+await tx.wait();
+```
+
+### OwnershipTransferred
+
+Emitted when contract ownership is transferred.
+
+```typescript
+event OwnershipTransferred(
+  address indexed previousOwner,
+  address indexed newOwner
+)
+```
+
+<ResponseField name="previousOwner" type="address" indexed>
+  Address of the previous owner
+</ResponseField>
+
+<ResponseField name="newOwner" type="address" indexed>
+  Address of the new owner
+</ResponseField>
+
+**Usage Example:**
+
+```typescript
+// Listen for ownership changes
+diamond.on('OwnershipTransferred', (prevOwner, newOwner) => {
+  console.log(`Ownership transferred from ${prevOwner} to ${newOwner}`);
+});
+
+// Query past ownership transfers
+const filter = diamond.filters.OwnershipTransferred();
+const events = await diamond.queryFilter(filter);
+events.forEach(event => {
+  console.log('Previous:', event.args.previousOwner);
+  console.log('New:', event.args.newOwner);
+});
+```
+
+## Interface
+
+The `LiFiDiamond` interface provides event filters and standard BaseContract functionality.
+
+```typescript
+export interface LiFiDiamond extends BaseContract {
+  interface: LiFiDiamondInterface;
+  
+  filters: {
+    DiamondCut(
+      _diamondCut?: null,
+      _init?: null,
+      _calldata?: null
+    ): DiamondCutEventFilter;
+    
+    OwnershipTransferred(
+      previousOwner?: PromiseOrValue<string> | null,
+      newOwner?: PromiseOrValue<string> | null
+    ): OwnershipTransferredEventFilter;
+  };
+}
+```
+
+## Diamond Standard (EIP-2535)
+
+The LiFiDiamond contract implements the Diamond Standard, which provides:
+
+1. **Function Delegation**: Calls to the diamond are delegated to facets
+2. **Loupe Functions**: Query which facets and functions are available
+3. **Diamond Cut**: Add, replace, or remove facets and functions
+4. **Shared Storage**: All facets access the same storage
+
+### Benefits
+
+- **Unlimited Size**: Overcome Ethereum's 24KB contract size limit
+- **Upgradeable**: Update functionality without changing the contract address
+- **Modular**: Organize code into logical, reusable facets
+- **Gas Efficient**: Only deploy and upgrade specific facets as needed
+- **Single Address**: Users interact with one address for all functionality
+
+### Common Facets in LiFi
+
+The LiFiDiamond typically includes facets for:
+- **Bridge Facets**: Across, Stargate, Hop, etc.
+- **DEX Facets**: Uniswap, Curve, etc.
+- **Utility Facets**: Access control, fee collection, etc.
+
+### Working with the Diamond
+
+```typescript
+// Connect to the diamond
+const diamond = await ethers.getContractAt('LiFiDiamond', diamondAddress);
+
+// Access functions from different facets through the same address
+const acrossFacet = await ethers.getContractAt('AcrossFacet', diamondAddress);
+const stargateFacet = await ethers.getContractAt('StargateFacet', diamondAddress);
+
+// All facets share the same address but expose different functions
+await acrossFacet.startBridgeTokensViaAcross(bridgeData, acrossData);
+await stargateFacet.startBridgeTokensViaStargate(bridgeData, stargateData);
+```
+
+## Security Considerations
+
+- Only the contract owner can perform diamond cuts
+- Function selectors must be unique across all facets
+- Initialization functions should be carefully reviewed
+- Storage layout must be carefully managed to avoid collisions
+- Removed facets' storage is not deleted and persists in the diamond

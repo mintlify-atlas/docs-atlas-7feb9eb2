@@ -1,0 +1,173 @@
+---
+title: StargateFacetV2
+description: Bridge tokens across chains using Stargate V2 (LayerZero)
+---
+
+## Overview
+
+The `StargateFacetV2` enables cross-chain token transfers using Stargate V2, built on LayerZero's omnichain messaging protocol. This is the latest version of Stargate with improved efficiency and features.
+
+## Contract Interface
+
+### Functions
+
+#### startBridgeTokensViaStargate
+
+Bridges tokens to another chain using Stargate V2.
+
+```typescript
+function startBridgeTokensViaStargate(
+  BridgeData _bridgeData,
+  StargateData _stargateData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data containing transaction details
+</ParamField>
+
+<ParamField path="_stargateData" type="StargateData">
+  Stargate V2-specific bridging parameters
+  
+  <Expandable title="StargateData fields">
+    <ParamField path="assetId" type="uint16">Stargate pool ID</ParamField>
+    <ParamField path="sendParams" type="SendParam">LayerZero send parameters</ParamField>
+    <ParamField path="fee" type="MessagingFee">LayerZero messaging fees</ParamField>
+    <ParamField path="refundAddress" type="address">Address to refund excess fees</ParamField>
+  </Expandable>
+</ParamField>
+
+#### swapAndStartBridgeTokensViaStargate
+
+Performs a token swap on the source chain before bridging via Stargate.
+
+```typescript
+function swapAndStartBridgeTokensViaStargate(
+  BridgeData _bridgeData,
+  SwapData[] _swapData,
+  StargateData _stargateData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data
+</ParamField>
+
+<ParamField path="_swapData" type="SwapData[]">
+  Array of swap operations to execute before bridging
+</ParamField>
+
+<ParamField path="_stargateData" type="StargateData">
+  Stargate-specific parameters
+</ParamField>
+
+#### tokenMessaging
+
+Returns the address of the token messaging contract.
+
+```typescript
+function tokenMessaging() external view returns (address)
+```
+
+## Data Structures
+
+### StargateData
+
+```typescript
+struct StargateData {
+  uint16 assetId;              // Stargate pool ID
+  SendParam sendParams;        // LayerZero send parameters
+  MessagingFee fee;           // Messaging fees
+  address refundAddress;       // Refund recipient
+}
+```
+
+### SendParam
+
+```typescript
+struct SendParam {
+  uint32 dstEid;              // Destination endpoint ID
+  bytes32 to;                 // Recipient address
+  uint256 amountLD;           // Amount in local decimals
+  uint256 minAmountLD;        // Minimum amount in local decimals
+  bytes extraOptions;         // Additional LayerZero options
+  bytes composeMsg;           // Composed message data
+  bytes oftCmd;               // OFT command data
+}
+```
+
+### MessagingFee
+
+```typescript
+struct MessagingFee {
+  uint256 nativeFee;          // Native token fee
+  uint256 lzTokenFee;         // LayerZero token fee
+}
+```
+
+## Usage Example
+
+```typescript
+import { StargateFacetV2 } from '@lifi/contract-types';
+
+const stargateFacet = StargateFacetV2__factory.connect(facetAddress, signer);
+
+const bridgeData = {
+  transactionId: '0x...',
+  bridge: 'stargate',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+  receiver: '0x...',
+  minAmount: ethers.utils.parseUnits('100', 6),
+  destinationChainId: 42161, // Arbitrum
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+const stargateData = {
+  assetId: 1, // USDC pool
+  sendParams: {
+    dstEid: 110, // Arbitrum endpoint ID
+    to: ethers.utils.hexZeroPad(bridgeData.receiver, 32),
+    amountLD: ethers.utils.parseUnits('100', 6),
+    minAmountLD: ethers.utils.parseUnits('99', 6),
+    extraOptions: '0x',
+    composeMsg: '0x',
+    oftCmd: '0x'
+  },
+  fee: {
+    nativeFee: ethers.utils.parseEther('0.01'),
+    lzTokenFee: 0
+  },
+  refundAddress: await signer.getAddress()
+};
+
+const tx = await stargateFacet.startBridgeTokensViaStargate(
+  bridgeData,
+  stargateData,
+  { value: stargateData.fee.nativeFee }
+);
+
+await tx.wait();
+```
+
+## Events
+
+- `LiFiTransferStarted(BridgeData bridgeData)`
+- `LiFiTransferCompleted`
+- `AssetSwapped` (when using swapAndStart variant)
+
+## Notes
+
+- This is Stargate V2, which uses LayerZero V2 under the hood
+- Native fees must be paid for LayerZero messaging
+- The `assetId` refers to Stargate pool IDs, not token addresses
+- Endpoint IDs (`dstEid`) differ from chain IDs
+
+## See Also
+
+- [Stargate V2 Documentation](https://stargateprotocol.gitbook.io/stargate/)
+- [LayerZero V2 Documentation](https://docs.layerzero.network/)
+- [BridgeData Reference](/concepts/bridge-data)
+- [SwapData Reference](/concepts/swap-data)

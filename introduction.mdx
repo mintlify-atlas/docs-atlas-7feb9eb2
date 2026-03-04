@@ -1,0 +1,141 @@
+---
+title: Introduction
+description: TypeScript type definitions for LiFi smart contracts enabling cross-chain bridging and swapping
+---
+
+## What is LiFi Contract Types?
+
+LiFi Contract Types (`lifi-contract-typings`) is a TypeScript library that provides comprehensive type definitions for LiFi's Solidity smart contracts. These typings enable type-safe interactions with LiFi's cross-chain infrastructure, ensuring developers pass the correct values when executing bridge and swap operations.
+
+## Why LiFi Contract Types?
+
+When building applications that interact with blockchain smart contracts, type safety is crucial to prevent costly errors. LiFi Contract Types addresses this by:
+
+- **Ensuring Type Safety**: Auto-generated TypeScript definitions from Solidity contracts prevent runtime errors
+- **Improving Developer Experience**: Get autocomplete, inline documentation, and compile-time validation in your IDE
+- **Reducing Integration Errors**: Catch parameter mismatches and type errors before deploying your code
+- **Maintaining Consistency**: Types are automatically synchronized with the latest LiFi contract implementations
+
+## What Problems Does It Solve?
+
+### 1. Type Safety for Bridge Operations
+
+When executing cross-chain transactions, you need to pass complex data structures like `BridgeDataStruct` with precise field types. Without proper typings, it's easy to pass incorrect values:
+
+```typescript
+// Without types - error-prone
+const bridgeData = {
+  transactionId: "0x123", // Should be bytes32
+  minAmount: "1000", // Should be BigNumber
+  // Missing required fields!
+};
+
+// With LiFi Contract Types - type-safe
+import { ILiFi } from 'lifi-contract-typings';
+
+const bridgeData: ILiFi.BridgeDataStruct = {
+  transactionId: ethers.utils.formatBytes32String("unique-tx-id"),
+  bridge: "across",
+  integrator: "my-app",
+  referrer: ethers.constants.AddressZero,
+  sendingAssetId: "0x...", // Token address
+  receiver: "0x...", // Recipient address
+  minAmount: ethers.utils.parseUnits("1000", 18),
+  destinationChainId: 137, // Polygon
+  hasSourceSwaps: false,
+  hasDestinationCall: false,
+};
+```
+
+### 2. Contract Factory Type Safety
+
+Access properly typed contract factories for all LiFi facets:
+
+```typescript
+import { AcrossFacet__factory } from 'lifi-contract-typings';
+import { ethers } from 'ethers';
+
+const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+const signer = provider.getSigner();
+
+// Fully typed contract instance
+const acrossFacet = AcrossFacet__factory.connect(
+  LIFI_DIAMOND_ADDRESS,
+  signer
+);
+```
+
+### 3. Event Listening with Type Safety
+
+Listen to contract events with properly typed event objects:
+
+```typescript
+import { ILiFi } from 'lifi-contract-typings';
+
+contract.on('LiFiTransferStarted', (bridgeData: ILiFi.BridgeDataStructOutput) => {
+  console.log(`Transfer started to chain ${bridgeData.destinationChainId}`);
+  console.log(`Sending amount: ${bridgeData.minAmount.toString()}`);
+});
+```
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="100+ Contract Types" icon="file-code">
+    Complete TypeScript definitions for all LiFi contracts including bridge facets, DEX aggregators, and periphery contracts
+  </Card>
+  
+  <Card title="Ethers.js v5 Compatible" icon="link">
+    Built for ethers.js v5 with full support for providers, signers, and contract interactions
+  </Card>
+  
+  <Card title="Auto-generated" icon="arrows-rotate">
+    Typings are automatically generated from Solidity contracts using TypeChain, ensuring accuracy
+  </Card>
+  
+  <Card title="Modular Exports" icon="cubes">
+    Import only what you need with granular exports for each contract and factory
+  </Card>
+</CardGroup>
+
+## Supported Bridge Facets
+
+LiFi Contract Types includes typings for all major bridge integrations:
+
+- **Across Protocol** (V3, V4, and packed versions)
+- **Stargate** (V2)
+- **Hop Protocol**
+- **cBridge** (Celer)
+- **Squid**
+- **Mayan**
+- **DeBridge DLN**
+- **Symbiosis**
+- **Native Bridges** (Arbitrum, Optimism, Polygon, Gnosis)
+- And many more...
+
+## Architecture
+
+LiFi uses the **Diamond Pattern** (EIP-2535) where functionality is split into "facets" that are attached to a central diamond contract. Each facet handles specific bridge or swap protocols:
+
+```
+LiFiDiamond (Main Contract)
+├── AcrossFacet
+├── StargateFacet
+├── GenericSwapFacet
+├── DiamondCutFacet
+└── ... (other facets)
+```
+
+This library provides TypeScript types for the diamond contract and all its facets.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install the package and set up your project
+  </Card>
+  
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Execute your first cross-chain bridge transaction
+  </Card>
+</CardGroup>

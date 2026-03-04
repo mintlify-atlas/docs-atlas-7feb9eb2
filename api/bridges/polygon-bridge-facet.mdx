@@ -1,0 +1,196 @@
+---
+title: PolygonBridgeFacet
+description: Bridge tokens to Polygon PoS using the official Polygon bridge
+---
+
+## Overview
+
+The `PolygonBridgeFacet` enables bridging of ETH and ERC20 tokens from Ethereum mainnet to Polygon PoS (Proof of Stake) using the official Polygon bridge infrastructure.
+
+## Contract Interface
+
+### Functions
+
+#### startBridgeTokensViaPolygonBridge
+
+Bridges tokens from Ethereum to Polygon PoS.
+
+```typescript
+function startBridgeTokensViaPolygonBridge(
+  BridgeData _bridgeData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data containing transaction details
+  
+  <Expandable title="BridgeData fields">
+    <ParamField path="transactionId" type="bytes32">Unique transaction identifier</ParamField>
+    <ParamField path="bridge" type="string">Bridge name ("polygon")</ParamField>
+    <ParamField path="integrator" type="string">Integrator identifier</ParamField>
+    <ParamField path="referrer" type="address">Referrer address</ParamField>
+    <ParamField path="sendingAssetId" type="address">Token address on Ethereum</ParamField>
+    <ParamField path="receiver" type="address">Recipient address on Polygon</ParamField>
+    <ParamField path="minAmount" type="uint256">Amount to bridge</ParamField>
+    <ParamField path="destinationChainId" type="uint256">Target chain ID (137 for Polygon)</ParamField>
+    <ParamField path="hasSourceSwaps" type="bool">Whether source swaps are included</ParamField>
+    <ParamField path="hasDestinationCall" type="bool">Whether destination call is included</ParamField>
+  </Expandable>
+</ParamField>
+
+#### swapAndStartBridgeTokensViaPolygonBridge
+
+Performs a token swap on Ethereum before bridging to Polygon.
+
+```typescript
+function swapAndStartBridgeTokensViaPolygonBridge(
+  BridgeData _bridgeData,
+  SwapData[] _swapData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data
+</ParamField>
+
+<ParamField path="_swapData" type="SwapData[]">
+  Array of swap operations to execute before bridging
+  
+  <Expandable title="SwapData fields">
+    <ParamField path="callTo" type="address">DEX contract address</ParamField>
+    <ParamField path="approveTo" type="address">Address to approve tokens to</ParamField>
+    <ParamField path="sendingAssetId" type="address">Input token address</ParamField>
+    <ParamField path="receivingAssetId" type="address">Output token address</ParamField>
+    <ParamField path="fromAmount" type="uint256">Input amount</ParamField>
+    <ParamField path="callData" type="bytes">DEX call data</ParamField>
+    <ParamField path="requiresDeposit" type="bool">Whether deposit is required</ParamField>
+  </Expandable>
+</ParamField>
+
+## Usage Example
+
+### Bridging ETH to Polygon
+
+```typescript
+import { PolygonBridgeFacet } from '@lifi/contract-types';
+
+const polygonFacet = PolygonBridgeFacet__factory.connect(facetAddress, signer);
+
+const bridgeData = {
+  transactionId: ethers.utils.randomBytes(32),
+  bridge: 'polygon',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0x0000000000000000000000000000000000000000', // Native ETH
+  receiver: await signer.getAddress(),
+  minAmount: ethers.utils.parseEther('1'),
+  destinationChainId: 137, // Polygon PoS
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+const tx = await polygonFacet.startBridgeTokensViaPolygonBridge(
+  bridgeData,
+  { value: bridgeData.minAmount }
+);
+
+await tx.wait();
+
+console.log('Bridging initiated. Tokens will arrive on Polygon in ~7-8 minutes.');
+```
+
+### Bridging ERC20 Tokens
+
+```typescript
+const bridgeData = {
+  transactionId: ethers.utils.randomBytes(32),
+  bridge: 'polygon',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC on Ethereum
+  receiver: await signer.getAddress(),
+  minAmount: ethers.utils.parseUnits('1000', 6),
+  destinationChainId: 137,
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+// Approve USDC first
+const usdc = new ethers.Contract(
+  bridgeData.sendingAssetId,
+  ['function approve(address spender, uint256 amount) returns (bool)'],
+  signer
+);
+
+await usdc.approve(polygonFacet.address, bridgeData.minAmount);
+
+// Bridge tokens
+const tx = await polygonFacet.startBridgeTokensViaPolygonBridge(
+  bridgeData,
+  { value: 0 }
+);
+
+await tx.wait();
+```
+
+### Swap and Bridge
+
+```typescript
+const swapData = [{
+  callTo: uniswapRouter,
+  approveTo: uniswapRouter,
+  sendingAssetId: daiAddress,
+  receivingAssetId: usdcAddress,
+  fromAmount: ethers.utils.parseUnits('1000', 18),
+  callData: swapCalldata,
+  requiresDeposit: true
+}];
+
+const bridgeData = {
+  transactionId: ethers.utils.randomBytes(32),
+  bridge: 'polygon',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: usdcAddress, // Will receive USDC after swap
+  receiver: await signer.getAddress(),
+  minAmount: ethers.utils.parseUnits('990', 6), // Min USDC expected
+  destinationChainId: 137,
+  hasSourceSwaps: true,
+  hasDestinationCall: false
+};
+
+const tx = await polygonFacet.swapAndStartBridgeTokensViaPolygonBridge(
+  bridgeData,
+  swapData,
+  { value: 0 }
+);
+
+await tx.wait();
+```
+
+## Events
+
+- `LiFiTransferStarted(BridgeData bridgeData)` - Emitted when bridge transfer is initiated
+- `LiFiTransferCompleted` - Emitted when transfer completes
+- `AssetSwapped` - Emitted when using swapAndStart variant
+
+## Notes
+
+- This facet only supports bridging **FROM** Ethereum mainnet **TO** Polygon PoS
+- Bridging typically takes **7-8 minutes** for checkpoint finality
+- The bridge uses the Plasma bridge by default for faster finality
+- For native ETH, the amount is sent as `msg.value`
+- For ERC20 tokens, approve the facet contract before calling
+- Token addresses on Polygon will be different from Ethereum (mapped tokens)
+
+## Bridge Times
+
+- **Ethereum → Polygon**: ~7-8 minutes (PoS bridge)
+- **Polygon → Ethereum**: ~3 hours (withdrawal requires checkpoint)
+
+## See Also
+
+- [Polygon Bridge Documentation](https://docs.polygon.technology/)
+- [Polygon PoS Bridge](https://wallet.polygon.technology/)
+- [BridgeData Reference](/concepts/bridge-data)
+- [SwapData Reference](/concepts/swap-data)

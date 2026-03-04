@@ -1,0 +1,299 @@
+---
+title: FeeCollector
+description: Collect and manage protocol and integrator fees
+---
+
+The `FeeCollector` contract manages fee collection for both LiFi protocol fees and integrator fees. It tracks balances per integrator and token, and allows withdrawal of collected fees.
+
+## Functions
+
+### Fee Collection
+
+#### collectTokenFees
+
+Collects fees in ERC20 tokens from a transaction.
+
+```typescript
+function collectTokenFees(
+  tokenAddress: string,
+  integratorFee: BigNumberish,
+  lifiFee: BigNumberish,
+  integratorAddress: string
+): Promise<ContractTransaction>
+```
+
+<ParamField path="tokenAddress" type="address" required>
+  Address of the ERC20 token
+</ParamField>
+
+<ParamField path="integratorFee" type="uint256" required>
+  Amount of tokens to collect as integrator fee
+</ParamField>
+
+<ParamField path="lifiFee" type="uint256" required>
+  Amount of tokens to collect as LiFi protocol fee
+</ParamField>
+
+<ParamField path="integratorAddress" type="address" required>
+  Address of the integrator to credit the fee to
+</ParamField>
+
+#### collectNativeFees
+
+Collects fees in native currency (ETH, MATIC, etc.).
+
+```typescript
+function collectNativeFees(
+  integratorFee: BigNumberish,
+  lifiFee: BigNumberish,
+  integratorAddress: string
+): Promise<ContractTransaction>
+```
+
+<ParamField path="integratorFee" type="uint256" required>
+  Amount of native currency to collect as integrator fee
+</ParamField>
+
+<ParamField path="lifiFee" type="uint256" required>
+  Amount of native currency to collect as LiFi protocol fee
+</ParamField>
+
+<ParamField path="integratorAddress" type="address" required>
+  Address of the integrator to credit the fee to
+</ParamField>
+
+### Fee Withdrawal
+
+#### withdrawIntegratorFees
+
+Withdraws collected fees for a specific token (integrator only).
+
+```typescript
+function withdrawIntegratorFees(
+  tokenAddress: string
+): Promise<ContractTransaction>
+```
+
+<ParamField path="tokenAddress" type="address" required>
+  Address of the token to withdraw (zero address for native)
+</ParamField>
+
+#### withdrawLifiFees
+
+Withdraws LiFi protocol fees for a specific token (owner only).
+
+```typescript
+function withdrawLifiFees(
+  tokenAddress: string
+): Promise<ContractTransaction>
+```
+
+<ParamField path="tokenAddress" type="address" required>
+  Address of the token to withdraw (zero address for native)
+</ParamField>
+
+#### batchWithdrawIntegratorFees
+
+Withdraws integrator fees for multiple tokens at once.
+
+```typescript
+function batchWithdrawIntegratorFees(
+  tokenAddresses: string[]
+): Promise<ContractTransaction>
+```
+
+<ParamField path="tokenAddresses" type="address[]" required>
+  Array of token addresses to withdraw
+</ParamField>
+
+#### batchWithdrawLifiFees
+
+Withdraws LiFi protocol fees for multiple tokens at once (owner only).
+
+```typescript
+function batchWithdrawLifiFees(
+  tokenAddresses: string[]
+): Promise<ContractTransaction>
+```
+
+<ParamField path="tokenAddresses" type="address[]" required>
+  Array of token addresses to withdraw
+</ParamField>
+
+### View Functions
+
+#### getTokenBalance
+
+Gets the fee balance for a specific integrator and token.
+
+```typescript
+function getTokenBalance(
+  integratorAddress: string,
+  tokenAddress: string
+): Promise<BigNumber>
+```
+
+<ParamField path="integratorAddress" type="address" required>
+  Address of the integrator
+</ParamField>
+
+<ParamField path="tokenAddress" type="address" required>
+  Address of the token
+</ParamField>
+
+#### getLifiTokenBalance
+
+Gets the LiFi protocol fee balance for a specific token.
+
+```typescript
+function getLifiTokenBalance(
+  tokenAddress: string
+): Promise<BigNumber>
+```
+
+<ParamField path="tokenAddress" type="address" required>
+  Address of the token
+</ParamField>
+
+### Ownership Functions
+
+The FeeCollector implements a two-step ownership transfer pattern:
+
+#### transferOwnership
+
+```typescript
+function transferOwnership(_newOwner: string): Promise<ContractTransaction>
+```
+
+#### confirmOwnershipTransfer
+
+```typescript
+function confirmOwnershipTransfer(): Promise<ContractTransaction>
+```
+
+#### cancelOwnershipTransfer
+
+```typescript
+function cancelOwnershipTransfer(): Promise<ContractTransaction>
+```
+
+#### owner
+
+```typescript
+function owner(): Promise<string>
+```
+
+#### pendingOwner
+
+```typescript
+function pendingOwner(): Promise<string>
+```
+
+## Events
+
+### FeesCollected
+
+Emitted when fees are collected.
+
+<ParamField path="_token" type="address">
+  Address of the token (zero for native)
+</ParamField>
+
+<ParamField path="_integrator" type="address">
+  Address of the integrator
+</ParamField>
+
+<ParamField path="_integratorFee" type="uint256">
+  Amount collected as integrator fee
+</ParamField>
+
+<ParamField path="_lifiFee" type="uint256">
+  Amount collected as LiFi protocol fee
+</ParamField>
+
+### FeesWithdrawn
+
+Emitted when integrator fees are withdrawn.
+
+<ParamField path="_token" type="address">
+  Address of the withdrawn token
+</ParamField>
+
+<ParamField path="_to" type="address">
+  Address receiving the fees
+</ParamField>
+
+<ParamField path="_amount" type="uint256">
+  Amount withdrawn
+</ParamField>
+
+### LiFiFeesWithdrawn
+
+Emitted when LiFi protocol fees are withdrawn.
+
+<ParamField path="_token" type="address">
+  Address of the withdrawn token
+</ParamField>
+
+<ParamField path="_to" type="address">
+  Address receiving the fees
+</ParamField>
+
+<ParamField path="_amount" type="uint256">
+  Amount withdrawn
+</ParamField>
+
+### OwnershipTransferRequested
+
+<ParamField path="_from" type="address">
+  Current owner
+</ParamField>
+
+<ParamField path="_to" type="address">
+  Pending new owner
+</ParamField>
+
+### OwnershipTransferred
+
+<ParamField path="previousOwner" type="address">
+  Previous owner
+</ParamField>
+
+<ParamField path="newOwner" type="address">
+  New owner
+</ParamField>
+
+## Usage Example
+
+```typescript
+import { FeeCollector__factory } from '@lifi/contract-types';
+import { ethers } from 'ethers';
+
+const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+const signer = provider.getSigner();
+const feeCollector = FeeCollector__factory.connect(FEE_COLLECTOR_ADDRESS, signer);
+
+// Collect fees in USDC
+const usdcAddress = '0xUSDC_ADDRESS';
+const integratorFee = ethers.utils.parseUnits('1', 6); // 1 USDC
+const lifiFee = ethers.utils.parseUnits('0.5', 6); // 0.5 USDC
+
+const tx = await feeCollector.collectTokenFees(
+  usdcAddress,
+  integratorFee,
+  lifiFee,
+  '0xINTEGRATOR_ADDRESS'
+);
+await tx.wait();
+
+// Check integrator balance
+const balance = await feeCollector.getTokenBalance(
+  '0xINTEGRATOR_ADDRESS',
+  usdcAddress
+);
+console.log('Integrator USDC balance:', ethers.utils.formatUnits(balance, 6));
+
+// Withdraw integrator fees
+const withdrawTx = await feeCollector.withdrawIntegratorFees(usdcAddress);
+await withdrawTx.wait();
+```

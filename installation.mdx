@@ -1,0 +1,163 @@
+---
+title: Installation
+description: Install LiFi Contract Types in your TypeScript or JavaScript project
+---
+
+## Package Manager Installation
+
+Install `lifi-contract-typings` using your preferred package manager:
+
+<CodeGroup>
+```bash npm
+npm install lifi-contract-typings
+```
+
+```bash yarn
+yarn add lifi-contract-typings
+```
+
+```bash pnpm
+pnpm add lifi-contract-typings
+```
+</CodeGroup>
+
+## Peer Dependencies
+
+LiFi Contract Types requires **ethers.js v5** and related packages. These are listed as dependencies in the package and will be installed automatically:
+
+```json
+{
+  "@ethersproject/abi": "^5.5.0",
+  "@ethersproject/bytes": "^5.5.0",
+  "@ethersproject/providers": "^5.5.1",
+  "ethers": "^5.5.2"
+}
+```
+
+<Note>
+  **Ethers v5 Required**: This package is designed for ethers.js version 5.x. If you're using ethers v6, you'll need to maintain separate installations or migrate your codebase.
+</Note>
+
+## Verify Installation
+
+After installation, verify that the package is working correctly:
+
+```typescript
+import { ILiFi, AcrossFacet__factory } from 'lifi-contract-typings';
+
+console.log('LiFi Contract Types installed successfully!');
+```
+
+If this import works without errors, you're ready to start using the types.
+
+## TypeScript Configuration
+
+Ensure your `tsconfig.json` is configured to support the package:
+
+```json tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "lib": ["ES2020"],
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": true
+  }
+}
+```
+
+<Tip>
+  Enable `strict` mode in TypeScript to get the full benefits of type safety provided by LiFi Contract Types.
+</Tip>
+
+## Module Exports
+
+The package supports both CommonJS and ES Module imports:
+
+<CodeGroup>
+```typescript ESM Import
+import { ILiFi, AcrossFacet__factory } from 'lifi-contract-typings';
+```
+
+```javascript CommonJS Require
+const { ILiFi, AcrossFacet__factory } = require('lifi-contract-typings');
+```
+</CodeGroup>
+
+## Specific Contract Imports
+
+You can also import specific contracts using subpath exports:
+
+```typescript
+import { CelerIMFacetMutable } from 'lifi-contract-typings/CelerIMFacetMutable';
+import { ISquidRouter } from 'lifi-contract-typings/ISquidRouter';
+import { GasZipFacet } from 'lifi-contract-typings/GasZipFacet';
+```
+
+This allows for more granular imports and can help with tree-shaking in your bundler.
+
+## What's Included
+
+After installation, you have access to:
+
+- **Type Definitions**: TypeScript interfaces for all LiFi contracts
+- **Contract Factories**: Factory classes to connect to deployed contracts
+- **Event Types**: Typed event listeners for contract events
+- **Struct Types**: Data structures like `BridgeDataStruct`, `SwapDataStruct`, etc.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start Guide" icon="rocket" href="/quickstart">
+    Learn how to execute your first bridge transaction
+  </Card>
+  
+  <Card title="Core Concepts" icon="book" href="/concepts/overview">
+    Understand key types and patterns
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Type Errors with Ethers
+
+If you see type errors related to ethers, ensure you're using ethers v5:
+
+```bash
+npm list ethers
+```
+
+You should see version `^5.5.2` or compatible.
+
+### Module Not Found
+
+If you encounter "Module not found" errors:
+
+1. Clear your node_modules and reinstall:
+   ```bash
+   rm -rf node_modules package-lock.json
+   npm install
+   ```
+
+2. Ensure your TypeScript version is up to date:
+   ```bash
+   npm install -D typescript@latest
+   ```
+
+### Build from Source
+
+If you need to build the package from source:
+
+```bash
+git clone https://github.com/lifinance/lifi-contract-types.git
+cd lifi-contract-types
+yarn install
+yarn build
+```
+
+<Warning>
+  Building from source is typically not necessary. Use the published npm package unless you need custom modifications.
+</Warning>

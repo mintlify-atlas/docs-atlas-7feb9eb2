@@ -1,0 +1,160 @@
+---
+title: CBridgeFacet
+description: Bridge tokens across chains using Celer cBridge
+---
+
+## Overview
+
+The `CBridgeFacet` enables cross-chain token transfers using Celer's cBridge, a decentralized and non-custodial cross-chain asset transfer network.
+
+## Contract Interface
+
+### Functions
+
+#### startBridgeTokensViaCBridge
+
+Bridges tokens to another chain using cBridge.
+
+```typescript
+function startBridgeTokensViaCBridge(
+  BridgeData _bridgeData,
+  CBridgeData _cBridgeData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data containing transaction details
+</ParamField>
+
+<ParamField path="_cBridgeData" type="CBridgeData">
+  cBridge-specific bridging parameters
+  
+  <Expandable title="CBridgeData fields">
+    <ParamField path="maxSlippage" type="uint32">Maximum allowed slippage (in basis points)</ParamField>
+    <ParamField path="nonce" type="uint64">Unique nonce for the transfer</ParamField>
+  </Expandable>
+</ParamField>
+
+#### swapAndStartBridgeTokensViaCBridge
+
+Performs a token swap on the source chain before bridging via cBridge.
+
+```typescript
+function swapAndStartBridgeTokensViaCBridge(
+  BridgeData _bridgeData,
+  SwapData[] _swapData,
+  CBridgeData _cBridgeData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data
+</ParamField>
+
+<ParamField path="_swapData" type="SwapData[]">
+  Array of swap operations to execute before bridging
+</ParamField>
+
+<ParamField path="_cBridgeData" type="CBridgeData">
+  cBridge-specific parameters
+</ParamField>
+
+#### triggerRefund
+
+Triggers a refund for a failed cBridge transfer.
+
+```typescript
+function triggerRefund(
+  address _callTo,
+  bytes _callData,
+  address _assetAddress,
+  address _to,
+  uint256 _amount
+) external
+```
+
+<ParamField path="_callTo" type="address">cBridge contract address to call</ParamField>
+<ParamField path="_callData" type="bytes">Encoded refund call data</ParamField>
+<ParamField path="_assetAddress" type="address">Token address to refund</ParamField>
+<ParamField path="_to" type="address">Recipient of the refund</ParamField>
+<ParamField path="_amount" type="uint256">Amount to refund</ParamField>
+
+## Data Structures
+
+### CBridgeData
+
+```typescript
+struct CBridgeData {
+  uint32 maxSlippage;  // Maximum slippage in basis points (e.g., 5000 = 50%)
+  uint64 nonce;        // Unique nonce for transfer
+}
+```
+
+## Usage Example
+
+```typescript
+import { CBridgeFacet } from '@lifi/contract-types';
+
+const cBridgeFacet = CBridgeFacet__factory.connect(facetAddress, signer);
+
+const bridgeData = {
+  transactionId: '0x...',
+  bridge: 'cbridge',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+  receiver: '0x...',
+  minAmount: ethers.utils.parseUnits('100', 6),
+  destinationChainId: 56, // BSC
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+const cBridgeData = {
+  maxSlippage: 5000, // 50% max slippage (in basis points)
+  nonce: Date.now() // Use timestamp as nonce
+};
+
+const tx = await cBridgeFacet.startBridgeTokensViaCBridge(
+  bridgeData,
+  cBridgeData,
+  { value: 0 }
+);
+
+await tx.wait();
+```
+
+## Refund Example
+
+If a cBridge transfer fails, you can trigger a refund:
+
+```typescript
+const refundTx = await cBridgeFacet.triggerRefund(
+  cBridgeContractAddress,
+  refundCallData,
+  tokenAddress,
+  recipientAddress,
+  amountToRefund
+);
+
+await refundTx.wait();
+```
+
+## Events
+
+- `LiFiTransferStarted(BridgeData bridgeData)`
+- `CBridgeRefund(address _assetAddress, address _to, uint256 amount)` - Emitted when refund is triggered
+- `AssetSwapped` (when using swapAndStart variant)
+
+## Notes
+
+- The `maxSlippage` parameter is specified in basis points (10000 = 100%)
+- Each transfer requires a unique `nonce` to prevent replay attacks
+- cBridge uses liquidity pools, so availability may vary by route
+- Transfers may take several minutes to complete depending on network conditions
+
+## See Also
+
+- [Celer cBridge Documentation](https://cbridge-docs.celer.network/)
+- [BridgeData Reference](/concepts/bridge-data)
+- [SwapData Reference](/concepts/swap-data)

@@ -1,0 +1,221 @@
+---
+title: OptimismBridgeFacet
+description: Bridge tokens to Optimism using the official Optimism bridge
+---
+
+## Overview
+
+The `OptimismBridgeFacet` enables bridging of ETH and ERC20 tokens from Ethereum mainnet to Optimism using the official Optimism bridge infrastructure.
+
+## Contract Interface
+
+### Configuration Functions
+
+#### initOptimism
+
+Initializes Optimism bridge configurations for supported assets.
+
+```typescript
+function initOptimism(
+  Config[] configs,
+  address standardBridge
+) external
+```
+
+<ParamField path="configs" type="Config[]">
+  Array of asset-to-bridge mappings
+  
+  <Expandable title="Config fields">
+    <ParamField path="assetId" type="address">Token address on L1</ParamField>
+    <ParamField path="bridge" type="address">Bridge contract address</ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="standardBridge" type="address">
+  Address of the Optimism standard bridge contract
+</ParamField>
+
+#### registerOptimismBridge
+
+Registers a new bridge for a specific asset.
+
+```typescript
+function registerOptimismBridge(address assetId, address bridge) external
+```
+
+<ParamField path="assetId" type="address">Token address to register</ParamField>
+<ParamField path="bridge" type="address">Bridge contract address</ParamField>
+
+### Bridging Functions
+
+#### startBridgeTokensViaOptimismBridge
+
+Bridges tokens from Ethereum to Optimism.
+
+```typescript
+function startBridgeTokensViaOptimismBridge(
+  BridgeData _bridgeData,
+  OptimismData _optimismData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data containing transaction details
+</ParamField>
+
+<ParamField path="_optimismData" type="OptimismData">
+  Optimism-specific bridging parameters
+  
+  <Expandable title="OptimismData fields">
+    <ParamField path="assetIdOnL2" type="address">Token address on Optimism (L2)</ParamField>
+    <ParamField path="l2Gas" type="uint32">Gas limit for L2 execution</ParamField>
+    <ParamField path="isSynthetix" type="bool">Whether using Synthetix bridge</ParamField>
+  </Expandable>
+</ParamField>
+
+#### swapAndStartBridgeTokensViaOptimismBridge
+
+Performs a token swap on Ethereum before bridging to Optimism.
+
+```typescript
+function swapAndStartBridgeTokensViaOptimismBridge(
+  BridgeData _bridgeData,
+  SwapData[] _swapData,
+  OptimismData _optimismData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data
+</ParamField>
+
+<ParamField path="_swapData" type="SwapData[]">
+  Array of swap operations to execute before bridging
+</ParamField>
+
+<ParamField path="_optimismData" type="OptimismData">
+  Optimism-specific parameters
+</ParamField>
+
+## Data Structures
+
+### OptimismData
+
+```typescript
+struct OptimismData {
+  address assetIdOnL2;    // Token address on L2
+  uint32 l2Gas;           // L2 gas limit
+  bool isSynthetix;       // Use Synthetix bridge
+}
+```
+
+### Config
+
+```typescript
+struct Config {
+  address assetId;  // Token address on L1
+  address bridge;   // Bridge contract address
+}
+```
+
+## Usage Example
+
+### Bridging ETH to Optimism
+
+```typescript
+import { OptimismBridgeFacet } from '@lifi/contract-types';
+
+const optimismFacet = OptimismBridgeFacet__factory.connect(facetAddress, signer);
+
+const bridgeData = {
+  transactionId: '0x...',
+  bridge: 'optimism',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0x0000000000000000000000000000000000000000', // Native ETH
+  receiver: '0x...',
+  minAmount: ethers.utils.parseEther('1'),
+  destinationChainId: 10, // Optimism
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+const optimismData = {
+  assetIdOnL2: '0x0000000000000000000000000000000000000000', // ETH on L2
+  l2Gas: 200000, // Gas for L2 deposit
+  isSynthetix: false
+};
+
+const tx = await optimismFacet.startBridgeTokensViaOptimismBridge(
+  bridgeData,
+  optimismData,
+  { value: bridgeData.minAmount }
+);
+
+await tx.wait();
+```
+
+### Bridging ERC20 Tokens
+
+```typescript
+const bridgeData = {
+  transactionId: '0x...',
+  bridge: 'optimism',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC on L1
+  receiver: '0x...',
+  minAmount: ethers.utils.parseUnits('1000', 6),
+  destinationChainId: 10,
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+const optimismData = {
+  assetIdOnL2: '0x7F5c764cBc14f9669B88837ca1490cCa17c31607', // USDC on Optimism
+  l2Gas: 200000,
+  isSynthetix: false
+};
+
+const tx = await optimismFacet.startBridgeTokensViaOptimismBridge(
+  bridgeData,
+  optimismData,
+  { value: 0 }
+);
+
+await tx.wait();
+```
+
+### Using Synthetix Bridge
+
+For certain assets bridged via Synthetix:
+
+```typescript
+const optimismData = {
+  assetIdOnL2: '0x...', // SNX on Optimism
+  l2Gas: 200000,
+  isSynthetix: true // Use Synthetix bridge
+};
+```
+
+## Events
+
+- `OptimismInitialized(Config[] configs)` - Emitted when Optimism is initialized
+- `OptimismBridgeRegistered(address assetId, address bridge)` - Emitted when a bridge is registered
+- `LiFiTransferStarted(BridgeData bridgeData)`
+- `AssetSwapped` (when using swapAndStart variant)
+
+## Notes
+
+- This facet only supports bridging **FROM** Ethereum mainnet **TO** Optimism
+- Bridging typically takes ~20 minutes for finality on Optimism
+- The `l2Gas` parameter should typically be set to 200,000 for standard deposits
+- For custom tokens, you may need to register the bridge mapping first
+- The Synthetix bridge is used for specific Synthetix ecosystem tokens
+
+## See Also
+
+- [Optimism Bridge Documentation](https://docs.optimism.io/)
+- [Optimism Standard Bridge](https://github.com/ethereum-optimism/optimism/tree/develop/packages/contracts/contracts/L1)
+- [BridgeData Reference](/concepts/bridge-data)
+- [SwapData Reference](/concepts/swap-data)

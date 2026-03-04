@@ -1,0 +1,231 @@
+---
+title: DiamondCutFacet
+description: Upgrade diamond contract by adding, replacing, or removing facets
+---
+
+The `DiamondCutFacet` implements the EIP-2535 Diamond Standard's upgrade mechanism, allowing the diamond contract to be upgraded by adding new facets, replacing existing ones, or removing facets.
+
+## Functions
+
+### diamondCut
+
+Performs a diamond cut to modify the diamond's facets.
+
+```typescript
+function diamondCut(
+  _diamondCut: LibDiamond.FacetCutStruct[],
+  _init: string,
+  _calldata: BytesLike
+): Promise<ContractTransaction>
+```
+
+<ParamField path="_diamondCut" type="LibDiamond.FacetCut[]" required>
+  Array of FacetCut structs describing the changes to make
+</ParamField>
+
+<ParamField path="_init" type="address" required>
+  Address of the contract to call after the cut (use zero address to skip)
+</ParamField>
+
+<ParamField path="_calldata" type="bytes" required>
+  Calldata to pass to the _init contract (empty if _init is zero address)
+</ParamField>
+
+## Data Structures
+
+### LibDiamond.FacetCut
+
+Describes a single facet modification.
+
+<ParamField path="facetAddress" type="address" required>
+  Address of the facet contract
+</ParamField>
+
+<ParamField path="action" type="uint8" required>
+  Action to perform:
+  - `0` = Add: Add new functions from the facet
+  - `1` = Replace: Replace existing functions with new implementations
+  - `2` = Remove: Remove functions (facetAddress must be zero address)
+</ParamField>
+
+<ParamField path="functionSelectors" type="bytes4[]" required>
+  Array of function selectors to add, replace, or remove
+</ParamField>
+
+## Events
+
+### DiamondCut
+
+Emitted when a diamond cut is performed.
+
+<ParamField path="_diamondCut" type="LibDiamond.FacetCut[]">
+  Array of facet cuts that were applied
+</ParamField>
+
+<ParamField path="_init" type="address">
+  Address of initialization contract called
+</ParamField>
+
+<ParamField path="_calldata" type="bytes">
+  Calldata passed to initialization contract
+</ParamField>
+
+## Usage Examples
+
+### Adding a New Facet
+
+```typescript
+import { DiamondCutFacet__factory } from '@lifi/contract-types';
+import { ethers } from 'ethers';
+
+const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+const signer = provider.getSigner();
+const diamondCut = DiamondCutFacet__factory.connect(DIAMOND_ADDRESS, signer);
+
+const FacetCutAction = {
+  Add: 0,
+  Replace: 1,
+  Remove: 2
+};
+
+// Deploy new facet
+const NewFacet = await ethers.getContractFactory('NewFacet');
+const newFacet = await NewFacet.deploy();
+await newFacet.deployed();
+
+// Get function selectors from the new facet
+const selectors = Object.keys(newFacet.interface.functions)
+  .map(fn => newFacet.interface.getSighash(fn));
+
+// Prepare the diamond cut
+const cut = [{
+  facetAddress: newFacet.address,
+  action: FacetCutAction.Add,
+  functionSelectors: selectors
+}];
+
+// Execute the cut
+const tx = await diamondCut.diamondCut(
+  cut,
+  ethers.constants.AddressZero, // No initialization
+  '0x' // No calldata
+);
+await tx.wait();
+```
+
+### Replacing Functions
+
+```typescript
+// Deploy updated facet
+const UpdatedFacet = await ethers.getContractFactory('UpdatedFacet');
+const updatedFacet = await UpdatedFacet.deploy();
+await updatedFacet.deployed();
+
+// Select which functions to replace
+const selectorsToReplace = [
+  updatedFacet.interface.getSighash('functionToUpdate'),
+  updatedFacet.interface.getSighash('anotherFunctionToUpdate')
+];
+
+const cut = [{
+  facetAddress: updatedFacet.address,
+  action: FacetCutAction.Replace,
+  functionSelectors: selectorsToReplace
+}];
+
+const tx = await diamondCut.diamondCut(
+  cut,
+  ethers.constants.AddressZero,
+  '0x'
+);
+await tx.wait();
+```
+
+### Removing Functions
+
+```typescript
+// Remove specific functions
+const selectorsToRemove = [
+  '0x12345678', // Function selector to remove
+  '0x87654321'  // Another selector to remove
+];
+
+const cut = [{
+  facetAddress: ethers.constants.AddressZero, // Must be zero for Remove action
+  action: FacetCutAction.Remove,
+  functionSelectors: selectorsToRemove
+}];
+
+const tx = await diamondCut.diamondCut(
+  cut,
+  ethers.constants.AddressZero,
+  '0x'
+);
+await tx.wait();
+```
+
+### Diamond Cut with Initialization
+
+```typescript
+// Deploy initialization contract
+const DiamondInit = await ethers.getContractFactory('DiamondInit');
+const diamondInit = await DiamondInit.deploy();
+await diamondInit.deployed();
+
+// Encode initialization function call
+const initCalldata = diamondInit.interface.encodeFunctionData('init', [
+  // initialization parameters
+]);
+
+const cut = [{
+  facetAddress: newFacet.address,
+  action: FacetCutAction.Add,
+  functionSelectors: selectors
+}];
+
+// Execute cut with initialization
+const tx = await diamondCut.diamondCut(
+  cut,
+  diamondInit.address,
+  initCalldata
+);
+await tx.wait();
+```
+
+### Batch Operations
+
+```typescript
+// Add, replace, and remove in a single transaction
+const cuts = [
+  {
+    facetAddress: newFacet.address,
+    action: FacetCutAction.Add,
+    functionSelectors: newSelectors
+  },
+  {
+    facetAddress: updatedFacet.address,
+    action: FacetCutAction.Replace,
+    functionSelectors: selectorsToReplace
+  },
+  {
+    facetAddress: ethers.constants.AddressZero,
+    action: FacetCutAction.Remove,
+    functionSelectors: selectorsToRemove
+  }
+];
+
+const tx = await diamondCut.diamondCut(
+  cuts,
+  ethers.constants.AddressZero,
+  '0x'
+);
+await tx.wait();
+```
+
+## Security Considerations
+
+- Only authorized addresses (typically the diamond owner) can execute diamond cuts
+- Diamond cuts are irreversible - test thoroughly on testnets first
+- Be careful when removing functions that other facets depend on
+- The initialization contract is called with `delegatecall`, so it operates in the diamond's storage context
+- Always verify facet addresses and selectors before executing cuts

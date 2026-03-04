@@ -1,0 +1,534 @@
+---
+title: Event Handling Guide
+description: Learn how to listen to, filter, and handle contract events with full TypeScript type safety
+---
+
+# Event Handling Guide
+
+LiFi contract types provide fully typed event handling with filters, listeners, and query capabilities. This guide covers everything you need to monitor contract activity.
+
+## Event Types Overview
+
+LiFi contracts emit several key events:
+
+- **LiFiTransferStarted** - Bridge operation initiated
+- **LiFiTransferCompleted** - Bridge operation completed  
+- **LiFiSwappedGeneric** - Token swap executed
+- **LiFiGenericSwapCompleted** - Swap operation completed
+- **AssetSwapped** - Individual swap step completed
+- **LiFiTransferRecovered** - Failed transfer recovered
+
+## Basic Event Listening
+
+### Setting Up Listeners
+
+```typescript
+import { ethers } from 'ethers';
+import { AcrossFacet__factory } from '@lifi/contract-types';
+
+const provider = new ethers.providers.WebSocketProvider(
+  'wss://eth-mainnet.g.alchemy.com/v2/your-api-key'
+);
+
+const LIFI_DIAMOND = '0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE';
+const acrossFacet = AcrossFacet__factory.connect(LIFI_DIAMOND, provider);
+
+// Listen for transfer started events
+acrossFacet.on('LiFiTransferStarted', (bridgeData, event) => {
+  console.log('Bridge started:', {
+    transactionId: bridgeData.transactionId,
+    bridge: bridgeData.bridge,
+    receiver: bridgeData.receiver,
+    amount: bridgeData.minAmount.toString(),
+    destinationChainId: bridgeData.destinationChainId.toString(),
+    blockNumber: event.blockNumber,
+    transactionHash: event.transactionHash
+  });
+});
+```
+
+<Note>
+Use WebSocket providers for real-time event listening. HTTP providers require polling and may miss events.
+</Note>
+
+### Typed Event Objects
+
+All events come with fully typed parameters:
+
+```typescript
+import { 
+  type LiFiTransferStartedEvent,
+  type LiFiTransferStartedEventObject 
+} from '@lifi/contract-types/dist/AcrossFacet';
+
+acrossFacet.on('LiFiTransferStarted', (
+  bridgeData: ILiFi.BridgeDataStructOutput,
+  event: LiFiTransferStartedEvent
+) => {
+  // bridgeData is fully typed
+  const { 
+    transactionId,
+    bridge,
+    integrator,
+    referrer,
+    sendingAssetId,
+    receiver,
+    minAmount,
+    destinationChainId,
+    hasSourceSwaps,
+    hasDestinationCall 
+  } = bridgeData;
+  
+  // event has full event metadata
+  console.log('Block:', event.blockNumber);
+  console.log('Tx hash:', event.transactionHash);
+  console.log('Log index:', event.logIndex);
+});
+```
+
+## Event Filters
+
+### Creating Filters
+
+Filters allow you to listen only to specific events:
+
+```typescript
+import { GenericSwapFacet__factory } from '@lifi/contract-types';
+
+const swapFacet = GenericSwapFacet__factory.connect(LIFI_DIAMOND, provider);
+
+// Create a filter for swap events
+const swapFilter = swapFacet.filters.LiFiSwappedGeneric();
+
+// Listen only to filtered events
+swapFacet.on(swapFilter, (
+  transactionId,
+  integrator,
+  referrer,
+  fromAssetId,
+  toAssetId,
+  fromAmount,
+  toAmount,
+  event
+) => {
+  console.log('Swap detected:', {
+    txId: ethers.utils.hexlify(transactionId),
+    from: fromAssetId,
+    to: toAssetId,
+    amountIn: fromAmount.toString(),
+    amountOut: toAmount.toString()
+  });
+});
+```
+
+### Filtered by Transaction ID
+
+Filter events by indexed parameters:
+
+```typescript
+const myTransactionId = ethers.utils.randomBytes(32);
+
+// Create filter for specific transaction ID
+const filter = swapFacet.filters.LiFiSwappedGeneric(
+  myTransactionId  // Only this transaction ID
+);
+
+swapFacet.once(filter, (txId, integrator, referrer, from, to, amountIn, amountOut) => {
+  console.log('My swap completed!');
+  console.log('Received:', amountOut.toString());
+});
+
+// Execute the swap
+const tx = await swapFacet.swapTokensGeneric(
+  myTransactionId,
+  'my-dapp',
+  '',
+  receiver,
+  minAmount,
+  swapData
+);
+```
+
+### Multiple Event Filters
+
+```typescript
+import { AcrossFacet__factory } from '@lifi/contract-types';
+
+const acrossFacet = AcrossFacet__factory.connect(LIFI_DIAMOND, provider);
+
+// Filter by destination chain
+const polygonBridges = acrossFacet.filters.LiFiTransferStarted();
+
+acrossFacet.on(polygonBridges, (bridgeData, event) => {
+  if (bridgeData.destinationChainId.eq(137)) {  // Polygon
+    console.log('Bridge to Polygon detected!');
+  }
+});
+```
+
+## Querying Historical Events
+
+### Query Past Events
+
+```typescript
+// Query events from a block range
+const currentBlock = await provider.getBlockNumber();
+const fromBlock = currentBlock - 5000;  // Last ~5000 blocks
+
+const filter = acrossFacet.filters.LiFiTransferStarted();
+const events = await acrossFacet.queryFilter(
+  filter,
+  fromBlock,
+  currentBlock
+);
+
+console.log(`Found ${events.length} bridge events`);
+
+events.forEach((event) => {
+  const { bridgeData } = event.args;
+  console.log({
+    block: event.blockNumber,
+    txHash: event.transactionHash,
+    bridge: bridgeData.bridge,
+    amount: bridgeData.minAmount.toString()
+  });
+});
+```
+
+### Query with Filters
+
+```typescript
+import { ethers } from 'ethers';
+
+// Query swaps for a specific transaction ID
+const txId = '0x1234...';
+const filter = swapFacet.filters.LiFiGenericSwapCompleted(
+  txId  // Transaction ID
+);
+
+const events = await swapFacet.queryFilter(filter, -1000);  // Last 1000 blocks
+
+if (events.length > 0) {
+  const event = events[0];
+  console.log('Swap found:', {
+    receiver: event.args.receiver,
+    fromToken: event.args.fromAssetId,
+    toToken: event.args.toAssetId,
+    amountReceived: event.args.toAmount.toString()
+  });
+}
+```
+
+### Query by Block Hash
+
+```typescript
+const blockHash = '0xabcd...';
+
+const events = await acrossFacet.queryFilter(
+  acrossFacet.filters.LiFiTransferStarted(),
+  blockHash
+);
+```
+
+## Advanced Event Handling
+
+### Once Listeners
+
+Listen for a single event, then stop:
+
+```typescript
+// Listen for next transfer completion
+acrossFacet.once('LiFiTransferCompleted', (
+  transactionId,
+  receivingAssetId,
+  receiver,
+  amount,
+  timestamp,
+  event
+) => {
+  console.log('Transfer completed!');
+  console.log('Receiver:', receiver);
+  console.log('Amount:', amount.toString());
+});
+```
+
+### Removing Listeners
+
+```typescript
+// Create a listener function
+const listener = (bridgeData, event) => {
+  console.log('Bridge started:', bridgeData.transactionId);
+};
+
+// Add listener
+acrossFacet.on('LiFiTransferStarted', listener);
+
+// Remove specific listener
+acrossFacet.off('LiFiTransferStarted', listener);
+
+// Remove all listeners for an event
+acrossFacet.removeAllListeners('LiFiTransferStarted');
+
+// Remove all listeners for all events
+acrossFacet.removeAllListeners();
+```
+
+### Listener Count
+
+```typescript
+// Check number of listeners
+const count = acrossFacet.listenerCount('LiFiTransferStarted');
+console.log(`${count} listeners registered`);
+
+// Get all listeners
+const listeners = acrossFacet.listeners('LiFiTransferStarted');
+listeners.forEach((listener, index) => {
+  console.log(`Listener ${index}:`, listener);
+});
+```
+
+## Parsing Events from Transactions
+
+### Parse Events from Receipt
+
+```typescript
+import { GenericSwapFacet__factory } from '@lifi/contract-types';
+
+const swapFacet = GenericSwapFacet__factory.connect(LIFI_DIAMOND, signer);
+
+// Execute transaction
+const tx = await swapFacet.swapTokensGeneric(
+  transactionId,
+  integrator,
+  referrer,
+  receiver,
+  minAmount,
+  swapData
+);
+
+const receipt = await tx.wait();
+
+// Parse events from receipt
+const swapCompletedEvent = receipt.events?.find(
+  e => e.event === 'LiFiGenericSwapCompleted'
+);
+
+if (swapCompletedEvent?.args) {
+  const { toAmount, toAssetId, receiver } = swapCompletedEvent.args;
+  console.log(`Swapped to ${toAmount} of ${toAssetId}`);
+  console.log(`Sent to ${receiver}`);
+}
+```
+
+### Parse Multiple Events
+
+```typescript
+const receipt = await tx.wait();
+
+// Find all AssetSwapped events (for multi-hop swaps)
+const assetSwapEvents = receipt.events?.filter(
+  e => e.event === 'AssetSwapped'
+);
+
+assetSwapEvents?.forEach((event, index) => {
+  const { fromAssetId, toAssetId, fromAmount, toAmount } = event.args;
+  console.log(`Swap ${index + 1}:`, {
+    from: fromAssetId,
+    to: toAssetId,
+    amountIn: fromAmount.toString(),
+    amountOut: toAmount.toString()
+  });
+});
+```
+
+## Event Monitoring Patterns
+
+### Transaction Status Tracker
+
+```typescript
+class BridgeTracker {
+  private acrossFacet: AcrossFacet;
+  private pendingTxs = new Map<string, any>();
+  
+  constructor(diamondAddress: string, provider: ethers.providers.Provider) {
+    this.acrossFacet = AcrossFacet__factory.connect(diamondAddress, provider);
+    this.setupListeners();
+  }
+  
+  private setupListeners() {
+    // Listen for started events
+    this.acrossFacet.on('LiFiTransferStarted', (bridgeData, event) => {
+      const txId = ethers.utils.hexlify(bridgeData.transactionId);
+      this.pendingTxs.set(txId, {
+        started: true,
+        startBlock: event.blockNumber,
+        receiver: bridgeData.receiver,
+        amount: bridgeData.minAmount
+      });
+      console.log(`Bridge ${txId} started`);
+    });
+    
+    // Listen for completed events
+    this.acrossFacet.on('LiFiTransferCompleted', (
+      transactionId,
+      receivingAssetId,
+      receiver,
+      amount,
+      timestamp,
+      event
+    ) => {
+      const txId = ethers.utils.hexlify(transactionId);
+      const pending = this.pendingTxs.get(txId);
+      
+      if (pending) {
+        pending.completed = true;
+        pending.completedBlock = event.blockNumber;
+        console.log(`Bridge ${txId} completed in block ${event.blockNumber}`);
+        this.pendingTxs.delete(txId);
+      }
+    });
+  }
+  
+  getPending() {
+    return Array.from(this.pendingTxs.entries());
+  }
+}
+
+// Usage
+const tracker = new BridgeTracker(LIFI_DIAMOND, provider);
+```
+
+### Event Aggregator
+
+```typescript
+class EventAggregator {
+  private facet: GenericSwapFacet;
+  private events: any[] = [];
+  
+  constructor(diamondAddress: string, provider: ethers.providers.Provider) {
+    this.facet = GenericSwapFacet__factory.connect(diamondAddress, provider);
+  }
+  
+  async fetchRecentSwaps(blockCount: number = 1000) {
+    const currentBlock = await this.facet.provider.getBlockNumber();
+    const fromBlock = currentBlock - blockCount;
+    
+    const filter = this.facet.filters.LiFiSwappedGeneric();
+    const events = await this.facet.queryFilter(filter, fromBlock, currentBlock);
+    
+    this.events = events.map(e => ({
+      txHash: e.transactionHash,
+      blockNumber: e.blockNumber,
+      transactionId: ethers.utils.hexlify(e.args.transactionId),
+      integrator: e.args.integrator,
+      fromAsset: e.args.fromAssetId,
+      toAsset: e.args.toAssetId,
+      fromAmount: e.args.fromAmount.toString(),
+      toAmount: e.args.toAmount.toString()
+    }));
+    
+    return this.events;
+  }
+  
+  getStats() {
+    const totalSwaps = this.events.length;
+    const uniqueIntegrators = new Set(this.events.map(e => e.integrator)).size;
+    
+    return { totalSwaps, uniqueIntegrators };
+  }
+}
+```
+
+## Error Handling
+
+```typescript
+try {
+  const filter = acrossFacet.filters.LiFiTransferStarted();
+  const events = await acrossFacet.queryFilter(filter, -10000);
+  
+  events.forEach(event => {
+    try {
+      const { bridgeData } = event.args;
+      console.log('Processing event:', bridgeData.transactionId);
+    } catch (error) {
+      console.error('Error parsing event:', error);
+    }
+  });
+} catch (error) {
+  if (error.code === 'SERVER_ERROR') {
+    console.error('Provider error - try reducing block range');
+  } else {
+    console.error('Query failed:', error);
+  }
+}
+```
+
+## Best Practices
+
+<Steps>
+
+### 1. Use WebSocket Providers
+
+For real-time event monitoring:
+
+```typescript
+// Good - WebSocket for real-time events
+const wsProvider = new ethers.providers.WebSocketProvider(wsUrl);
+const facet = AcrossFacet__factory.connect(address, wsProvider);
+
+// Avoid - HTTP provider requires polling
+const httpProvider = new ethers.providers.JsonRpcProvider(httpUrl);
+```
+
+### 2. Clean Up Listeners
+
+Always remove listeners when done:
+
+```typescript
+function setupMonitoring() {
+  const listener = (bridgeData, event) => {
+    console.log('Event:', bridgeData);
+  };
+  
+  acrossFacet.on('LiFiTransferStarted', listener);
+  
+  // Clean up when component unmounts
+  return () => {
+    acrossFacet.off('LiFiTransferStarted', listener);
+  };
+}
+```
+
+### 3. Batch Event Queries
+
+Query in reasonable block ranges:
+
+```typescript
+// Good - reasonable block range
+const events = await facet.queryFilter(filter, -5000);
+
+// Avoid - very large range may timeout
+const events = await facet.queryFilter(filter, 0, 'latest');
+```
+
+### 4. Handle Provider Disconnections
+
+```typescript
+provider.on('error', (error) => {
+  console.error('Provider error:', error);
+  // Reconnect logic here
+});
+
+provider.on('disconnect', () => {
+  console.log('Provider disconnected - reconnecting...');
+  // Reconnect to provider
+});
+```
+
+</Steps>
+
+## Next Steps
+
+- [Using Factories](/guides/using-factories) - Connect to contracts
+- [Bridge Integration](/guides/bridge-integration) - Build bridge integrations
+- [Swap Integration](/guides/swap-integration) - Implement swap functionality

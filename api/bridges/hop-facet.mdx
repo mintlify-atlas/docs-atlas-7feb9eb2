@@ -1,0 +1,175 @@
+---
+title: HopFacet
+description: Bridge tokens across chains using Hop Protocol
+---
+
+## Overview
+
+The `HopFacet` enables cross-chain token transfers using the Hop Protocol. Hop provides fast and efficient bridging between Ethereum and Layer 2 networks.
+
+## Contract Interface
+
+### Configuration Functions
+
+#### initHop
+
+Initializes Hop bridge configurations for supported assets.
+
+```typescript
+function initHop(Config[] configs) external
+```
+
+<ParamField path="configs" type="Config[]">
+  Array of asset-to-bridge mappings
+  
+  <Expandable title="Config fields">
+    <ParamField path="assetId" type="address">Token address</ParamField>
+    <ParamField path="bridge" type="address">Hop bridge contract address</ParamField>
+  </Expandable>
+</ParamField>
+
+#### registerBridge
+
+Registers a new Hop bridge for a specific asset.
+
+```typescript
+function registerBridge(address assetId, address bridge) external
+```
+
+<ParamField path="assetId" type="address">Token address to register</ParamField>
+<ParamField path="bridge" type="address">Hop bridge contract address</ParamField>
+
+### Bridging Functions
+
+#### startBridgeTokensViaHop
+
+Bridges tokens to another chain using Hop Protocol.
+
+```typescript
+function startBridgeTokensViaHop(
+  BridgeData _bridgeData,
+  HopData _hopData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data containing transaction details
+</ParamField>
+
+<ParamField path="_hopData" type="HopData">
+  Hop-specific bridging parameters
+  
+  <Expandable title="HopData fields">
+    <ParamField path="bonderFee" type="uint256">Fee paid to bonder</ParamField>
+    <ParamField path="amountOutMin" type="uint256">Minimum output amount</ParamField>
+    <ParamField path="deadline" type="uint256">Transaction deadline</ParamField>
+    <ParamField path="destinationAmountOutMin" type="uint256">Minimum amount on destination</ParamField>
+    <ParamField path="destinationDeadline" type="uint256">Deadline on destination chain</ParamField>
+    <ParamField path="relayer" type="address">Relayer address (optional)</ParamField>
+    <ParamField path="relayerFee" type="uint256">Fee for relayer service</ParamField>
+    <ParamField path="nativeFee" type="uint256">Native token fee amount</ParamField>
+  </Expandable>
+</ParamField>
+
+#### swapAndStartBridgeTokensViaHop
+
+Performs a token swap on the source chain before bridging via Hop.
+
+```typescript
+function swapAndStartBridgeTokensViaHop(
+  BridgeData _bridgeData,
+  SwapData[] _swapData,
+  HopData _hopData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data
+</ParamField>
+
+<ParamField path="_swapData" type="SwapData[]">
+  Array of swap operations to execute before bridging
+</ParamField>
+
+<ParamField path="_hopData" type="HopData">
+  Hop-specific parameters
+</ParamField>
+
+## Data Structures
+
+### HopData
+
+```typescript
+struct HopData {
+  uint256 bonderFee;                    // Fee for the bonder
+  uint256 amountOutMin;                 // Minimum amount out on source
+  uint256 deadline;                     // Source chain deadline
+  uint256 destinationAmountOutMin;      // Min amount on destination
+  uint256 destinationDeadline;          // Destination deadline
+  address relayer;                      // Relayer address
+  uint256 relayerFee;                   // Relayer service fee
+  uint256 nativeFee;                    // Native token fee
+}
+```
+
+### Config
+
+```typescript
+struct Config {
+  address assetId;  // Token address
+  address bridge;   // Hop bridge address
+}
+```
+
+## Usage Example
+
+```typescript
+import { HopFacet } from '@lifi/contract-types';
+
+const hopFacet = HopFacet__factory.connect(facetAddress, signer);
+
+const bridgeData = {
+  transactionId: '0x...',
+  bridge: 'hop',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+  receiver: '0x...',
+  minAmount: ethers.utils.parseUnits('100', 6),
+  destinationChainId: 137, // Polygon
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+const hopData = {
+  bonderFee: ethers.utils.parseUnits('0.5', 6),
+  amountOutMin: ethers.utils.parseUnits('99', 6),
+  deadline: Math.floor(Date.now() / 1000) + 3600,
+  destinationAmountOutMin: ethers.utils.parseUnits('99', 6),
+  destinationDeadline: Math.floor(Date.now() / 1000) + 7200,
+  relayer: '0x0000000000000000000000000000000000000000',
+  relayerFee: 0,
+  nativeFee: 0
+};
+
+const tx = await hopFacet.startBridgeTokensViaHop(
+  bridgeData,
+  hopData,
+  { value: hopData.nativeFee }
+);
+
+await tx.wait();
+```
+
+## Events
+
+- `HopInitialized(Config[] configs)` - Emitted when Hop is initialized
+- `HopBridgeRegistered(address assetId, address bridge)` - Emitted when a bridge is registered
+- `LiFiTransferStarted(BridgeData bridgeData)` - Standard transfer event
+- `AssetSwapped` (when using swapAndStart variant)
+
+## See Also
+
+- [Hop Protocol Documentation](https://docs.hop.exchange/)
+- [BridgeData Reference](/concepts/bridge-data)
+- [SwapData Reference](/concepts/swap-data)

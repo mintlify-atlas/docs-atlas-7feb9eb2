@@ -1,0 +1,208 @@
+---
+title: GnosisBridgeFacet
+description: Bridge tokens to Gnosis Chain using the xDai bridge
+---
+
+## Overview
+
+The `GnosisBridgeFacet` enables bridging of ETH and ERC20 tokens from Ethereum mainnet to Gnosis Chain (formerly xDai Chain) using the official Gnosis bridge infrastructure.
+
+## Contract Interface
+
+### Functions
+
+#### startBridgeTokensViaGnosisBridge
+
+Bridges tokens from Ethereum to Gnosis Chain.
+
+```typescript
+function startBridgeTokensViaGnosisBridge(
+  BridgeData _bridgeData
+) external
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data containing transaction details
+  
+  <Expandable title="BridgeData fields">
+    <ParamField path="transactionId" type="bytes32">Unique transaction identifier</ParamField>
+    <ParamField path="bridge" type="string">Bridge name ("gnosis")</ParamField>
+    <ParamField path="integrator" type="string">Integrator identifier</ParamField>
+    <ParamField path="referrer" type="address">Referrer address</ParamField>
+    <ParamField path="sendingAssetId" type="address">Token address on Ethereum</ParamField>
+    <ParamField path="receiver" type="address">Recipient address on Gnosis</ParamField>
+    <ParamField path="minAmount" type="uint256">Amount to bridge</ParamField>
+    <ParamField path="destinationChainId" type="uint256">Target chain ID (100 for Gnosis)</ParamField>
+    <ParamField path="hasSourceSwaps" type="bool">Whether source swaps are included</ParamField>
+    <ParamField path="hasDestinationCall" type="bool">Whether destination call is included</ParamField>
+  </Expandable>
+</ParamField>
+
+#### swapAndStartBridgeTokensViaGnosisBridge
+
+Performs a token swap on Ethereum before bridging to Gnosis Chain.
+
+```typescript
+function swapAndStartBridgeTokensViaGnosisBridge(
+  BridgeData _bridgeData,
+  SwapData[] _swapData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data
+</ParamField>
+
+<ParamField path="_swapData" type="SwapData[]">
+  Array of swap operations to execute before bridging
+  
+  <Expandable title="SwapData fields">
+    <ParamField path="callTo" type="address">DEX contract address</ParamField>
+    <ParamField path="approveTo" type="address">Address to approve tokens to</ParamField>
+    <ParamField path="sendingAssetId" type="address">Input token address</ParamField>
+    <ParamField path="receivingAssetId" type="address">Output token address</ParamField>
+    <ParamField path="fromAmount" type="uint256">Input amount</ParamField>
+    <ParamField path="callData" type="bytes">DEX call data</ParamField>
+    <ParamField path="requiresDeposit" type="bool">Whether deposit is required</ParamField>
+  </Expandable>
+</ParamField>
+
+## Usage Example
+
+### Bridging DAI to Gnosis (becomes xDai)
+
+```typescript
+import { GnosisBridgeFacet } from '@lifi/contract-types';
+
+const gnosisFacet = GnosisBridgeFacet__factory.connect(facetAddress, signer);
+
+const bridgeData = {
+  transactionId: ethers.utils.randomBytes(32),
+  bridge: 'gnosis',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0x6B175474E89094C44Da98b954EedeAC495271d0F', // DAI on Ethereum
+  receiver: await signer.getAddress(),
+  minAmount: ethers.utils.parseUnits('100', 18),
+  destinationChainId: 100, // Gnosis Chain
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+// Approve DAI first
+const dai = new ethers.Contract(
+  bridgeData.sendingAssetId,
+  ['function approve(address spender, uint256 amount) returns (bool)'],
+  signer
+);
+
+await dai.approve(gnosisFacet.address, bridgeData.minAmount);
+
+// Bridge DAI to xDai
+const tx = await gnosisFacet.startBridgeTokensViaGnosisBridge(bridgeData);
+
+await tx.wait();
+
+console.log('DAI bridged. Will arrive as xDai on Gnosis Chain.');
+```
+
+### Bridging ERC20 Tokens
+
+```typescript
+const bridgeData = {
+  transactionId: ethers.utils.randomBytes(32),
+  bridge: 'gnosis',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC on Ethereum
+  receiver: await signer.getAddress(),
+  minAmount: ethers.utils.parseUnits('1000', 6),
+  destinationChainId: 100,
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+// Approve USDC
+const usdc = new ethers.Contract(
+  bridgeData.sendingAssetId,
+  ['function approve(address spender, uint256 amount) returns (bool)'],
+  signer
+);
+
+await usdc.approve(gnosisFacet.address, bridgeData.minAmount);
+
+// Bridge tokens
+const tx = await gnosisFacet.startBridgeTokensViaGnosisBridge(bridgeData);
+
+await tx.wait();
+```
+
+### Swap and Bridge
+
+```typescript
+const swapData = [{
+  callTo: uniswapRouter,
+  approveTo: uniswapRouter,
+  sendingAssetId: wethAddress,
+  receivingAssetId: daiAddress,
+  fromAmount: ethers.utils.parseEther('1'),
+  callData: swapCalldata,
+  requiresDeposit: true
+}];
+
+const bridgeData = {
+  transactionId: ethers.utils.randomBytes(32),
+  bridge: 'gnosis',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: daiAddress,
+  receiver: await signer.getAddress(),
+  minAmount: ethers.utils.parseUnits('1800', 18), // Min DAI expected
+  destinationChainId: 100,
+  hasSourceSwaps: true,
+  hasDestinationCall: false
+};
+
+const tx = await gnosisFacet.swapAndStartBridgeTokensViaGnosisBridge(
+  bridgeData,
+  swapData
+);
+
+await tx.wait();
+```
+
+## Events
+
+- `LiFiTransferStarted(BridgeData bridgeData)` - Emitted when bridge transfer is initiated
+- `LiFiTransferCompleted` - Emitted when transfer completes
+- `AssetSwapped` - Emitted when using swapAndStart variant
+
+## Notes
+
+- This facet only supports bridging **FROM** Ethereum mainnet **TO** Gnosis Chain
+- DAI bridged to Gnosis becomes **xDai** (the native gas token)
+- Other ERC20 tokens are bridged to their wrapped/mapped versions on Gnosis
+- Bridging typically takes a few minutes for finality
+- The bridge uses the Arbitrary Message Bridge (AMB) for ERC20 tokens
+- Tokens must be approved before bridging
+
+## Token Bridging
+
+### DAI → xDai
+DAI from Ethereum becomes xDai (native token) on Gnosis Chain with 1:1 ratio.
+
+### Other ERC20 Tokens
+ERC20 tokens are bridged using the OmniBridge, creating wrapped versions on Gnosis Chain.
+
+## Bridge Times
+
+- **Ethereum → Gnosis**: ~5 minutes
+- **Gnosis → Ethereum**: ~5 minutes + challenge period
+
+## See Also
+
+- [Gnosis Chain Documentation](https://docs.gnosischain.com/)
+- [xDai Bridge](https://bridge.gnosischain.com/)
+- [OmniBridge Documentation](https://docs.tokenbridge.net/)
+- [BridgeData Reference](/concepts/bridge-data)
+- [SwapData Reference](/concepts/swap-data)

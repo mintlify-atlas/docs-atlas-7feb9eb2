@@ -1,0 +1,148 @@
+---
+title: AcrossFacet
+description: Bridge tokens across chains using Across Protocol
+---
+
+## Overview
+
+The `AcrossFacet` enables cross-chain token transfers using the Across Protocol. Across is a cross-chain bridge optimized for capital efficiency and fast transfers.
+
+## Contract Interface
+
+### Functions
+
+#### startBridgeTokensViaAcross
+
+Bridges tokens to another chain using Across Protocol.
+
+```typescript
+function startBridgeTokensViaAcross(
+  BridgeData _bridgeData,
+  AcrossData _acrossData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data containing transaction details
+  
+  <Expandable title="BridgeData fields">
+    <ParamField path="transactionId" type="bytes32">Unique transaction identifier</ParamField>
+    <ParamField path="bridge" type="string">Bridge name ("across")</ParamField>
+    <ParamField path="integrator" type="string">Integrator identifier</ParamField>
+    <ParamField path="referrer" type="address">Referrer address</ParamField>
+    <ParamField path="sendingAssetId" type="address">Token address on source chain</ParamField>
+    <ParamField path="receiver" type="address">Recipient address on destination chain</ParamField>
+    <ParamField path="minAmount" type="uint256">Minimum amount to receive</ParamField>
+    <ParamField path="destinationChainId" type="uint256">Target chain ID</ParamField>
+    <ParamField path="hasSourceSwaps" type="bool">Whether source swaps are included</ParamField>
+    <ParamField path="hasDestinationCall" type="bool">Whether destination call is included</ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="_acrossData" type="AcrossData">
+  Across-specific bridging parameters
+  
+  <Expandable title="AcrossData fields">
+    <ParamField path="relayerFeePct" type="int64">Relayer fee percentage</ParamField>
+    <ParamField path="quoteTimestamp" type="uint32">Quote timestamp from Across API</ParamField>
+    <ParamField path="message" type="bytes">Optional message data</ParamField>
+    <ParamField path="maxCount" type="uint256">Maximum count for relay</ParamField>
+  </Expandable>
+</ParamField>
+
+#### swapAndStartBridgeTokensViaAcross
+
+Performs a token swap on the source chain before bridging via Across.
+
+```typescript
+function swapAndStartBridgeTokensViaAcross(
+  BridgeData _bridgeData,
+  SwapData[] _swapData,
+  AcrossData _acrossData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data
+</ParamField>
+
+<ParamField path="_swapData" type="SwapData[]">
+  Array of swap operations to execute before bridging
+  
+  <Expandable title="SwapData fields">
+    <ParamField path="callTo" type="address">DEX contract address</ParamField>
+    <ParamField path="approveTo" type="address">Address to approve tokens to</ParamField>
+    <ParamField path="sendingAssetId" type="address">Input token address</ParamField>
+    <ParamField path="receivingAssetId" type="address">Output token address</ParamField>
+    <ParamField path="fromAmount" type="uint256">Input amount</ParamField>
+    <ParamField path="callData" type="bytes">DEX call data</ParamField>
+    <ParamField path="requiresDeposit" type="bool">Whether deposit is required</ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="_acrossData" type="AcrossData">
+  Across-specific parameters
+</ParamField>
+
+## Data Structures
+
+### AcrossData
+
+```typescript
+struct AcrossData {
+  int64 relayerFeePct;    // Relayer fee as percentage
+  uint32 quoteTimestamp;  // Quote timestamp
+  bytes message;          // Optional message
+  uint256 maxCount;       // Maximum relay count
+}
+```
+
+## Usage Example
+
+```typescript
+import { AcrossFacet } from '@lifi/contract-types';
+
+const acrossFacet = AcrossFacet__factory.connect(facetAddress, signer);
+
+const bridgeData = {
+  transactionId: '0x...',
+  bridge: 'across',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+  receiver: '0x...',
+  minAmount: ethers.utils.parseUnits('100', 6),
+  destinationChainId: 10, // Optimism
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+const acrossData = {
+  relayerFeePct: ethers.BigNumber.from('5000'), // 0.5%
+  quoteTimestamp: Math.floor(Date.now() / 1000),
+  message: '0x',
+  maxCount: ethers.BigNumber.from('1')
+};
+
+const tx = await acrossFacet.startBridgeTokensViaAcross(
+  bridgeData,
+  acrossData,
+  { value: 0 }
+);
+
+await tx.wait();
+```
+
+## Events
+
+The facet emits standard LiFi events:
+
+- `LiFiTransferStarted(BridgeData bridgeData)`
+- `LiFiTransferCompleted`
+- `AssetSwapped` (when using swapAndStart variant)
+
+## See Also
+
+- [Across Protocol Documentation](https://docs.across.to/)
+- [BridgeData Reference](/concepts/bridge-data)
+- [SwapData Reference](/concepts/swap-data)

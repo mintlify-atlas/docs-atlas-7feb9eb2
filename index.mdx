@@ -1,97 +1,217 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "LiFi Contract Types"
+description: "Type-safe TypeScript interfaces for LiFi cross-chain bridge smart contracts"
+mode: "custom"
 ---
 
-## Setting up
+<div className="relative overflow-hidden bg-gradient-to-br from-[#7C3AED] via-[#6D28D9] to-[#5B21B6] dark:from-[#5B21B6] dark:via-[#4C1D95] dark:to-[#3B0764] py-20">
+  <div className="max-w-6xl mx-auto px-6 lg:px-8">
+    <div className="grid lg:grid-cols-12 gap-12 items-center">
+      <div className="lg:col-span-7">
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6">
+          LiFi Contract Types
+        </h1>
+        <p className="text-lg sm:text-xl text-purple-100 max-w-2xl mb-8">
+          Complete TypeScript type definitions for LiFi's cross-chain bridge protocol. Build type-safe integrations with 20+ bridge providers using ethers.js v5.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <a
+            href="/quickstart"
+            className="inline-flex items-center px-6 py-3 rounded-lg bg-white text-[#7C3AED] font-semibold hover:bg-purple-50 transition-colors"
+          >
+            Get Started
+          </a>
+          <a
+            href="/api/core/ilifi"
+            className="inline-flex items-center px-6 py-3 rounded-lg border border-white/30 bg-white/10 text-white font-semibold hover:bg-white/20 transition-colors"
+          >
+            Explore API Reference
+          </a>
+        </div>
+      </div>
+      <div className="lg:col-span-5 hidden lg:block">
+        <div className="relative">
+          <div className="absolute inset-0 bg-white/10 backdrop-blur-sm rounded-2xl"></div>
+          <div className="relative p-6 text-white">
+            <div className="text-sm font-mono mb-2 text-purple-200">TypeScript</div>
+            <pre className="text-sm"><code>{`import { AcrossFacet__factory } from 'lifi-contract-typings';
 
-Get your documentation site up and running in minutes.
+const facet = AcrossFacet__factory
+  .connect(address, provider);
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+await facet.startBridgeTokensViaAcross({
+  transactionId,
+  bridge: 'across',
+  integrator,
+  referrer,
+  sendingAssetId,
+  receiver,
+  minAmount,
+  destinationChainId,
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+});`}</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-## Make it yours
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Quick Start</h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Get up and running with LiFi Contract Types in minutes.
+  </p>
 
-Design a docs site that looks great and empowers your users.
+  <Steps>
+    <Step title="Install the package">
+      Install the package using your preferred package manager:
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
-  </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
+      <CodeGroup>
+      ```bash npm
+      npm install lifi-contract-typings
+      ```
+      ```bash yarn
+      yarn add lifi-contract-typings
+      ```
+      ```bash pnpm
+      pnpm add lifi-contract-typings
+      ```
+      </CodeGroup>
+    </Step>
 
-## Create beautiful pages
+    <Step title="Import contract types">
+      Import the contract types and factories you need:
 
-Everything you need to create world-class documentation.
+      ```typescript
+      import { 
+        AcrossFacet,
+        AcrossFacet__factory,
+        ILiFi 
+      } from 'lifi-contract-typings';
+      import { ethers } from 'ethers';
+      ```
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+      <Note>
+        The package exports both contract type definitions and factory classes for every facet.
+      </Note>
+    </Step>
 
-## Need inspiration?
+    <Step title="Connect to a contract">
+      Use the factory to connect to a deployed contract:
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+      ```typescript
+      const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+      const signer = new ethers.Wallet(PRIVATE_KEY, provider);
+
+      const acrossFacet = AcrossFacet__factory.connect(
+        CONTRACT_ADDRESS,
+        signer
+      );
+      ```
+    </Step>
+
+    <Step title="Execute type-safe transactions">
+      Call contract methods with full TypeScript type safety:
+
+      ```typescript
+      const bridgeData: ILiFi.BridgeDataStruct = {
+        transactionId: ethers.utils.formatBytes32String('tx-123'),
+        bridge: 'across',
+        integrator: 'your-app',
+        referrer: ethers.constants.AddressZero,
+        sendingAssetId: TOKEN_ADDRESS,
+        receiver: RECEIVER_ADDRESS,
+        minAmount: ethers.utils.parseEther('1.0'),
+        destinationChainId: 137,
+        hasSourceSwaps: false,
+        hasDestinationCall: false
+      };
+
+      const tx = await acrossFacet.startBridgeTokensViaAcross(
+        bridgeData,
+        acrossData
+      );
+      await tx.wait();
+      ```
+
+      <Tip>
+        All struct types are fully typed, providing autocomplete and compile-time validation.
+      </Tip>
+    </Step>
+  </Steps>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Key Features</h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Everything you need to build cross-chain applications with LiFi.
+  </p>
+
+  <CardGroup cols={3}>
+    <Card title="20+ Bridge Integrations" icon="bridge" href="/api/bridges/across-facet">
+      Support for Across, Hop, Stargate, Celer, and 15+ more bridge protocols.
+    </Card>
+    <Card title="Type-Safe Contracts" icon="shield-check" href="/concepts/facets">
+      Full TypeScript definitions for all contracts, structs, and events.
+    </Card>
+    <Card title="Ethers.js v5" icon="code" href="/guides/using-factories">
+      Built-in factory classes for seamless ethers.js integration.
+    </Card>
+    <Card title="Diamond Pattern" icon="gem" href="/api/diamond/diamond-cut-facet">
+      EIP-2535 Diamond Standard architecture for upgradeable contracts.
+    </Card>
+    <Card title="Swap Functionality" icon="arrow-right-arrow-left" href="/api/swaps/generic-swap-facet">
+      Generic DEX swap support for multi-hop cross-chain transactions.
+    </Card>
+    <Card title="Event Handling" icon="bell" href="/guides/event-handling">
+      Strongly-typed event listeners and filters for all contract events.
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Explore by Topic</h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Dive deeper into specific areas of the LiFi contract ecosystem.
+  </p>
+
+  <CardGroup cols={2}>
+    <Card title="Core Types" icon="cube" href="/api/core/ilifi">
+      BridgeData, SwapData, and core LiFi interface definitions.
+    </Card>
+    <Card title="Bridge Facets" icon="bridge-water" href="/api/bridges/across-facet">
+      Complete reference for all supported bridge protocol integrations.
+    </Card>
+    <Card title="Swap Facets" icon="repeat" href="/api/swaps/generic-swap-facet">
+      DEX aggregation and token swap functionality.
+    </Card>
+    <Card title="Utility Facets" icon="wrench" href="/api/utilities/executor">
+      Fee collection, withdrawals, and access management.
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="rounded-2xl border border-gray-200 dark:border-[#27272a] bg-gray-50 dark:bg-[#1a1d27] p-8">
+    <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Ready to Build?</h2>
+    <p className="text-base text-gray-600 dark:text-gray-400 mb-6">
+      Start integrating LiFi's cross-chain bridge infrastructure into your application today.
+    </p>
+    <div className="flex flex-wrap gap-4">
+      <a
+        href="/installation"
+        className="inline-flex items-center px-6 py-3 rounded-lg bg-[#7C3AED] text-white font-semibold hover:bg-[#6D28D9] transition-colors"
+      >
+        Installation Guide
+      </a>
+      <a
+        href="https://github.com/lifinance/lifi-contract-types"
+        className="inline-flex items-center px-6 py-3 rounded-lg border border-gray-300 dark:border-[#27272a] bg-white dark:bg-[#242838] text-gray-900 dark:text-white font-semibold hover:bg-gray-50 dark:hover:bg-[#2a2f42] transition-colors"
+      >
+        View on GitHub →
+      </a>
+    </div>
+  </div>
+</div>

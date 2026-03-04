@@ -1,0 +1,180 @@
+---
+title: ArbitrumBridgeFacet
+description: Bridge tokens to Arbitrum using the official Arbitrum bridge
+---
+
+## Overview
+
+The `ArbitrumBridgeFacet` enables bridging of ETH and ERC20 tokens from Ethereum mainnet to Arbitrum using the official Arbitrum bridge infrastructure.
+
+## Contract Interface
+
+### Functions
+
+#### startBridgeTokensViaArbitrumBridge
+
+Bridges tokens from Ethereum to Arbitrum.
+
+```typescript
+function startBridgeTokensViaArbitrumBridge(
+  BridgeData _bridgeData,
+  ArbitrumData _arbitrumData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data containing transaction details
+</ParamField>
+
+<ParamField path="_arbitrumData" type="ArbitrumData">
+  Arbitrum-specific bridging parameters
+  
+  <Expandable title="ArbitrumData fields">
+    <ParamField path="maxSubmissionCost" type="uint256">Maximum cost for submitting the retryable ticket</ParamField>
+    <ParamField path="maxGas" type="uint256">Maximum gas to use on L2</ParamField>
+    <ParamField path="maxGasPrice" type="uint256">Maximum gas price to pay on L2</ParamField>
+  </Expandable>
+</ParamField>
+
+#### swapAndStartBridgeTokensViaArbitrumBridge
+
+Performs a token swap on Ethereum before bridging to Arbitrum.
+
+```typescript
+function swapAndStartBridgeTokensViaArbitrumBridge(
+  BridgeData _bridgeData,
+  SwapData[] _swapData,
+  ArbitrumData _arbitrumData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data
+</ParamField>
+
+<ParamField path="_swapData" type="SwapData[]">
+  Array of swap operations to execute before bridging
+</ParamField>
+
+<ParamField path="_arbitrumData" type="ArbitrumData">
+  Arbitrum-specific parameters
+</ParamField>
+
+## Data Structures
+
+### ArbitrumData
+
+```typescript
+struct ArbitrumData {
+  uint256 maxSubmissionCost;  // Max cost for L2 submission
+  uint256 maxGas;             // Max gas for L2 execution
+  uint256 maxGasPrice;        // Max gas price on L2 (in wei)
+}
+```
+
+## Usage Example
+
+### Bridging ETH to Arbitrum
+
+```typescript
+import { ArbitrumBridgeFacet } from '@lifi/contract-types';
+
+const arbitrumFacet = ArbitrumBridgeFacet__factory.connect(facetAddress, signer);
+
+const bridgeData = {
+  transactionId: '0x...',
+  bridge: 'arbitrum',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0x0000000000000000000000000000000000000000', // Native ETH
+  receiver: '0x...',
+  minAmount: ethers.utils.parseEther('1'),
+  destinationChainId: 42161, // Arbitrum One
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+const arbitrumData = {
+  maxSubmissionCost: ethers.utils.parseEther('0.01'),
+  maxGas: 2000000,
+  maxGasPrice: ethers.utils.parseUnits('10', 'gwei')
+};
+
+const totalValue = bridgeData.minAmount.add(arbitrumData.maxSubmissionCost);
+
+const tx = await arbitrumFacet.startBridgeTokensViaArbitrumBridge(
+  bridgeData,
+  arbitrumData,
+  { value: totalValue }
+);
+
+await tx.wait();
+```
+
+### Bridging ERC20 Tokens
+
+```typescript
+const bridgeData = {
+  transactionId: '0x...',
+  bridge: 'arbitrum',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+  receiver: '0x...',
+  minAmount: ethers.utils.parseUnits('1000', 6),
+  destinationChainId: 42161,
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+const arbitrumData = {
+  maxSubmissionCost: ethers.utils.parseEther('0.01'),
+  maxGas: 2000000,
+  maxGasPrice: ethers.utils.parseUnits('10', 'gwei')
+};
+
+// For ERC20, only pay for L2 gas costs in ETH
+const tx = await arbitrumFacet.startBridgeTokensViaArbitrumBridge(
+  bridgeData,
+  arbitrumData,
+  { value: arbitrumData.maxSubmissionCost }
+);
+
+await tx.wait();
+```
+
+## Events
+
+- `LiFiTransferStarted(BridgeData bridgeData)`
+- `LiFiTransferCompleted`
+- `AssetSwapped` (when using swapAndStart variant)
+
+## Notes
+
+- This facet only supports bridging **FROM** Ethereum mainnet **TO** Arbitrum
+- Bridging typically takes ~10 minutes for finality
+- The `maxSubmissionCost` is paid in ETH and covers L2 transaction costs
+- `maxGas` should be sufficient for the L2 deposit operation (typically 2M gas)
+- Excess ETH from `maxSubmissionCost` is refunded to the receiver on L2
+- When bridging native ETH, include both the bridge amount and submission cost in `msg.value`
+
+## Gas Estimation
+
+To estimate costs for the Arbitrum bridge:
+
+```typescript
+const maxSubmissionCost = await inbox.calculateRetryableSubmissionFee(
+  dataLength,
+  baseFee
+);
+
+const gasCost = maxGas * maxGasPrice;
+const totalL2Cost = maxSubmissionCost.add(gasCost);
+```
+
+## See Also
+
+- [Arbitrum Bridge Documentation](https://docs.arbitrum.io/)
+- [Arbitrum Retryable Tickets](https://docs.arbitrum.io/arbos/l1-to-l2-messaging)
+- [BridgeData Reference](/concepts/bridge-data)
+- [SwapData Reference](/concepts/swap-data)

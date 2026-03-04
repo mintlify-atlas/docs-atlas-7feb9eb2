@@ -1,0 +1,125 @@
+---
+title: "Architecture Overview"
+description: "Understanding the Diamond Pattern architecture and how LiFi Contract Types work together"
+---
+
+## Diamond Pattern Architecture
+
+LiFi contracts are built using the **EIP-2535 Diamond Standard**, a modular smart contract architecture that enables unlimited contract functionality while staying within Ethereum's contract size limits.
+
+### What is the Diamond Pattern?
+
+The Diamond Pattern is a design pattern for organizing smart contract code that:
+
+- **Separates logic into facets**: Individual contracts (facets) that contain specific functionality
+- **Uses delegatecall**: All facets share the same storage through a central Diamond contract
+- **Enables upgradeability**: Facets can be added, replaced, or removed without redeploying the entire system
+- **Bypasses size limits**: Breaks functionality into smaller contracts to avoid the 24KB contract size limit
+
+### Core Components
+
+The LiFi Diamond architecture consists of:
+
+#### 1. Diamond Contract
+
+The main contract that:
+- Stores all state variables
+- Routes function calls to appropriate facets via delegatecall
+- Maintains a mapping of function selectors to facet addresses
+
+#### 2. Facets
+
+Modular contracts that implement specific functionality:
+- **Bridge Facets**: Integration with cross-chain bridges (Across, Hop, Stargate, etc.)
+- **Swap Facets**: DEX aggregation and token swapping capabilities
+- **Utility Facets**: Helper functions, access control, withdrawal mechanisms
+- **Diamond Standard Facets**: Core Diamond pattern functionality (DiamondCut, DiamondLoupe, Ownership)
+
+#### 3. Shared Libraries
+
+Common libraries used across facets:
+- **LibSwap**: Swap execution and data structures
+- **LibDiamond**: Diamond storage and management
+- **LibAccess**: Access control utilities
+
+### How Facets Work Together
+
+When a transaction is executed:
+
+1. **User calls** a function on the Diamond contract address
+2. **Diamond lookup**: The fallback function looks up which facet implements that function
+3. **Delegatecall execution**: The Diamond delegates the call to the appropriate facet
+4. **Shared storage**: The facet executes using the Diamond's storage context
+5. **Return data**: Results are returned to the user through the Diamond
+
+```solidity
+// Example: User calls swapAndStartBridgeTokensViaAcross
+Diamond (0x1234...) 
+  └─> delegatecall to AcrossFacet
+       └─> Uses LibSwap for token swapping
+       └─> Accesses Diamond storage
+       └─> Returns result to user
+```
+
+### Benefits of This Architecture
+
+**Modularity**: Each bridge or feature is isolated in its own facet, making code easier to understand and maintain.
+
+**Upgradeability**: Individual facets can be upgraded without affecting other functionality.
+
+**Unlimited Size**: The Diamond can have unlimited functionality by distributing it across multiple facets.
+
+**Gas Efficiency**: Only load the code that's needed for each transaction.
+
+**Shared State**: All facets access the same storage, enabling seamless data sharing.
+
+### Data Flow Example
+
+Here's how a typical cross-chain swap and bridge transaction flows through the system:
+
+```typescript
+// 1. User initiates a swap and bridge via Across
+await diamond.swapAndStartBridgeTokensViaAcross(
+  bridgeData,  // ILiFi.BridgeData
+  swapData,    // LibSwap.SwapData[]
+  acrossData   // Bridge-specific data
+);
+
+// 2. Diamond routes to AcrossFacet
+// 3. AcrossFacet uses LibSwap to execute swaps
+// 4. AcrossFacet initiates bridge transaction
+// 5. Events are emitted from Diamond contract
+```
+
+## Key Concepts
+
+Before diving into specific facets and data structures, it's important to understand these core concepts:
+
+- **[Bridge Data](/concepts/bridge-data)**: The standardized data structure used across all bridge integrations
+- **[Swap Data](/concepts/swap-data)**: The structure defining token swap parameters
+- **[Facets](/concepts/facets)**: The modular contracts that implement specific functionality
+
+## Common Patterns
+
+### Two-Step Transactions
+
+Most facets offer two patterns:
+
+1. **Direct Bridge**: `startBridgeTokensVia{Bridge}` - Bridge tokens directly
+2. **Swap + Bridge**: `swapAndStartBridgeTokensVia{Bridge}` - Swap source tokens first, then bridge
+
+Both patterns use the same `BridgeData` structure but the swap version accepts an additional `SwapData[]` parameter.
+
+### Event Emission
+
+All transactions emit standardized events:
+- `LiFiTransferStarted`: Marks the beginning of a cross-chain transfer
+- `AssetSwapped`: Logs each swap execution (if swaps are performed)
+- Bridge-specific events from the respective protocols
+
+### Access Control
+
+Facets use shared access control via `LibAccess`:
+- Owner-only functions for critical operations
+- Whitelisted DEX/bridge addresses
+- Pausable functionality for emergency situations

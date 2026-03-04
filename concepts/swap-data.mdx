@@ -1,0 +1,346 @@
+---
+title: "SwapData Structure"
+description: "Complete reference for the LibSwap.SwapData struct used for DEX interactions"
+---
+
+## Overview
+
+The `SwapData` struct defines the parameters needed to execute a token swap on a decentralized exchange (DEX). It's used throughout the LiFi system whenever tokens need to be swapped before bridging or as part of a multi-step transaction.
+
+This flexible structure supports any DEX by encoding the specific swap calldata, making it protocol-agnostic.
+
+## Type Definition
+
+```typescript
+export type SwapDataStruct = {
+  callTo: string;
+  approveTo: string;
+  sendingAssetId: string;
+  receivingAssetId: string;
+  fromAmount: BigNumberish;
+  callData: BytesLike;
+  requiresDeposit: boolean;
+};
+```
+
+## Fields
+
+<ParamField path="callTo" type="address" required>
+  The address of the DEX contract or router to call for executing the swap.
+  
+  **Examples**:
+  - Uniswap V3 Router: `0xE592427A0AEce92De3Edee1F18E0157C05861564`
+  - 1inch Router: `0x1111111254EEB25477B68fb85Ed929f73A960582`
+  - 0x Exchange Proxy: `0xDef1C0ded9bec7F1a1670819833240f027b25EfF`
+  
+  **Security**: This address must be on the DEX whitelist maintained by LiFi.
+</ParamField>
+
+<ParamField path="approveTo" type="address" required>
+  The address to approve for spending the input tokens. Often the same as `callTo`, but may differ for some DEX architectures.
+  
+  **Examples**:
+  - For most DEXs: Same as `callTo`
+  - For some aggregators: A separate proxy contract
+  
+  **Purpose**: The contract will approve this address to spend `fromAmount` of `sendingAssetId` before executing the swap.
+  
+  **Security**: This address must also be whitelisted.
+</ParamField>
+
+<ParamField path="sendingAssetId" type="address" required>
+  The token contract address being swapped (input token).
+  
+  **Examples**:
+  - ERC20 token: `0x6B175474E89094C44Da98b954EedeAC495271d0F` (DAI)
+  - Native asset: `0x0000000000000000000000000000000000000000`
+  
+  **Note**: Use zero address for native assets (ETH, MATIC, etc.). Native assets don't require approval.
+</ParamField>
+
+<ParamField path="receivingAssetId" type="address" required>
+  The token contract address being received (output token).
+  
+  **Examples**:
+  - ERC20 token: `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` (USDC)
+  - Native asset: `0x0000000000000000000000000000000000000000`
+  
+  **Purpose**: Used for validation and tracking the expected output token.
+</ParamField>
+
+<ParamField path="fromAmount" type="uint256" required>
+  The exact amount of `sendingAssetId` tokens to swap.
+  
+  **Example**: `1000000000000000000` (1 ETH with 18 decimals)
+  
+  **Important**: Must match the amount specified in the `callData`. The contract validates this to prevent manipulation.
+</ParamField>
+
+<ParamField path="callData" type="bytes" required>
+  The encoded function call data to execute on the `callTo` contract.
+  
+  **Purpose**: Contains the complete swap instruction including:
+  - Function selector
+  - Swap path/route
+  - Minimum output amount (slippage protection)
+  - Deadline
+  - Recipient address
+  
+  **Example**: Encoded Uniswap V3 `exactInputSingle` call
+  
+  **Generation**: Typically obtained from DEX APIs or SDK functions.
+</ParamField>
+
+<ParamField path="requiresDeposit" type="bool" required>
+  Indicates whether the swap requires depositing native assets into a wrapped token contract (e.g., ETH -> WETH).
+  
+  **Values**:
+  - `true`: Native asset will be wrapped before swapping
+  - `false`: Standard swap execution
+  
+  **Use Cases**:
+  - Swapping ETH on a DEX that only supports WETH
+  - Converting native assets to ERC20 before bridging
+</ParamField>
+
+## Usage Examples
+
+### Single Swap Example
+
+Swapping ETH for USDC on Uniswap V3:
+
+```typescript
+import { LibSwap } from '@lifi/contract-types';
+import { ethers } from 'ethers';
+
+// Get swap calldata from Uniswap SDK or API
+const uniswapRouter = '0xE592427A0AEce92De3Edee1F18E0157C05861564';
+const swapCalldata = '0x...' // Encoded exactInputSingle call
+
+const swapData: LibSwap.SwapDataStruct = {
+  callTo: uniswapRouter,
+  approveTo: uniswapRouter,
+  sendingAssetId: '0x0000000000000000000000000000000000000000', // ETH
+  receivingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+  fromAmount: ethers.utils.parseEther('1.0'), // 1 ETH
+  callData: swapCalldata,
+  requiresDeposit: false,
+};
+```
+
+### Multiple Swaps Example
+
+Executing a multi-hop swap path (DAI -> USDC -> WETH):
+
+```typescript
+const swapData: LibSwap.SwapDataStruct[] = [
+  {
+    // First swap: DAI -> USDC
+    callTo: '0xE592427A0AEce92De3Edee1F18E0157C05861564',
+    approveTo: '0xE592427A0AEce92De3Edee1F18E0157C05861564',
+    sendingAssetId: '0x6B175474E89094C44Da98b954EedeAC495271d0F', // DAI
+    receivingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+    fromAmount: ethers.utils.parseEther('1000'), // 1000 DAI
+    callData: '0x...', // DAI->USDC swap calldata
+    requiresDeposit: false,
+  },
+  {
+    // Second swap: USDC -> WETH
+    callTo: '0xE592427A0AEce92De3Edee1F18E0157C05861564',
+    approveTo: '0xE592427A0AEce92De3Edee1F18E0157C05861564',
+    sendingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+    receivingAssetId: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH
+    fromAmount: '1000000000', // 1000 USDC (6 decimals) - received from first swap
+    callData: '0x...', // USDC->WETH swap calldata
+    requiresDeposit: false,
+  },
+];
+
+// Execute swaps before bridging
+await facet.swapAndStartBridgeTokensViaAcross(
+  bridgeData,
+  swapData,
+  acrossData
+);
+```
+
+### Using with Generic Swap Facet
+
+```typescript
+import { GenericSwapFacet } from '@lifi/contract-types';
+
+const genericSwapFacet = GenericSwapFacet__factory.connect(
+  diamondAddress,
+  signer
+);
+
+// Swap without bridging
+await genericSwapFacet.swapTokensGeneric(
+  transactionId,
+  'my-integrator',
+  '0x0000000000000000000000000000000000000000', // No referrer
+  await signer.getAddress(), // Receiver
+  minOutputAmount,
+  [swapData] // Array of swaps to execute
+);
+```
+
+## Generating Swap Calldata
+
+### Using DEX Aggregator APIs
+
+Most production systems use DEX aggregator APIs to generate optimal swap routes:
+
+```typescript
+// Example: Using LiFi API
+const quote = await fetch('https://li.quest/v1/quote', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    fromChain: 1,
+    toChain: 1,
+    fromToken: 'ETH',
+    toToken: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+    fromAmount: '1000000000000000000',
+    fromAddress: userAddress,
+  }),
+}).then(r => r.json());
+
+// Extract swap data from quote
+const swapData = quote.transactionRequest.swapData;
+```
+
+### Using Uniswap SDK
+
+```typescript
+import { SwapRouter } from '@uniswap/v3-sdk';
+import { TradeType } from '@uniswap/sdk-core';
+
+// Create trade
+const route = new Route([pool], tokenIn, tokenOut);
+const trade = await Trade.fromRoute(
+  route,
+  amountIn,
+  TradeType.EXACT_INPUT
+);
+
+// Generate calldata
+const { calldata, value } = SwapRouter.swapCallParameters(
+  trade,
+  {
+    slippageTolerance: new Percent(50, 10000), // 0.5%
+    recipient: diamondAddress,
+    deadline: Math.floor(Date.now() / 1000) + 1800, // 30 min
+  }
+);
+
+const swapData: LibSwap.SwapDataStruct = {
+  callTo: UNISWAP_V3_ROUTER,
+  approveTo: UNISWAP_V3_ROUTER,
+  sendingAssetId: tokenIn.address,
+  receivingAssetId: tokenOut.address,
+  fromAmount: amountIn.toString(),
+  callData: calldata,
+  requiresDeposit: false,
+};
+```
+
+## Security Considerations
+
+### DEX Whitelisting
+
+For security, LiFi maintains a whitelist of approved DEX contracts:
+
+```typescript
+// Only whitelisted addresses are allowed
+const isWhitelisted = await diamond.isContractWhitelisted(
+  swapData.callTo
+);
+
+if (!isWhitelisted) {
+  throw new Error('DEX not whitelisted');
+}
+```
+
+### Amount Validation
+
+The contract validates that `fromAmount` matches the actual swap amount to prevent manipulation:
+
+```solidity
+// Inside LibSwap
+require(
+  actualAmount == swapData.fromAmount,
+  "Amount mismatch"
+);
+```
+
+### Approval Management
+
+The contract manages token approvals automatically:
+
+1. Checks current allowance
+2. Resets to 0 if needed (for tokens like USDT)
+3. Approves exact `fromAmount`
+4. Executes swap
+5. Revokes any remaining approval
+
+## Related Events
+
+When swaps are executed, the following event is emitted for each swap:
+
+```solidity
+event AssetSwapped(
+  bytes32 transactionId,
+  address dex,
+  address fromAssetId,
+  address toAssetId,
+  uint256 fromAmount,
+  uint256 toAmount,
+  uint256 timestamp
+);
+```
+
+## Common Patterns
+
+### Pre-Bridge Swaps
+
+Swapping to the required bridge token before bridging:
+
+```typescript
+// User has ETH but bridge requires USDC
+const swapData = [{
+  // Swap ETH -> USDC
+  callTo: uniswapRouter,
+  approveTo: uniswapRouter,
+  sendingAssetId: ETH_ADDRESS,
+  receivingAssetId: USDC_ADDRESS,
+  fromAmount: ethAmount,
+  callData: swapCalldata,
+  requiresDeposit: false,
+}];
+
+const bridgeData = {
+  // Bridge USDC
+  sendingAssetId: USDC_ADDRESS,
+  hasSourceSwaps: true,
+  // ... other fields
+};
+```
+
+### Gas Optimization
+
+Minimize the number of swaps to reduce gas costs:
+
+```typescript
+// Bad: ETH -> DAI -> USDC -> USDT (3 swaps)
+// Good: ETH -> USDT (1 swap using optimal route)
+```
+
+### Slippage Protection
+
+Always include slippage protection in swap calldata:
+
+```typescript
+// Encode minimum output amount in calldata
+const minOut = expectedOutput * (1 - slippageTolerance);
+```

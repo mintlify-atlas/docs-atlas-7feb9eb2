@@ -1,0 +1,303 @@
+---
+title: Using Factory Classes
+description: Learn how to use TypeChain factory classes to connect to and interact with LiFi contracts
+---
+
+# Using Factory Classes
+
+LiFi contract types include TypeChain-generated factory classes that make it easy to connect to deployed contracts and interact with them in a type-safe manner.
+
+## Overview
+
+Factory classes provide:
+- Type-safe contract deployment
+- Type-safe connection to existing contracts
+- Full TypeScript autocomplete for contract methods
+- Typed event filters and listeners
+
+## Connecting to Contracts
+
+### Basic Connection
+
+Connect to an existing contract using the `connect` static method:
+
+```typescript
+import { ethers } from 'ethers';
+import { AcrossFacet__factory } from '@lifi/contract-types';
+
+// Set up provider and contract address
+const provider = new ethers.providers.JsonRpcProvider('https://eth-mainnet.alchemyapi.io/v2/...');
+const contractAddress = '0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE';
+
+// Connect to the contract
+const acrossFacet = AcrossFacet__factory.connect(contractAddress, provider);
+
+// Now you can call contract methods with full type safety
+const tx = await acrossFacet.startBridgeTokensViaAcross(bridgeData, acrossData);
+```
+
+### Connecting with a Signer
+
+To send transactions, connect with a signer instead of a provider:
+
+```typescript
+import { ethers } from 'ethers';
+import { GenericSwapFacet__factory } from '@lifi/contract-types';
+
+// Set up signer
+const provider = new ethers.providers.Web3Provider(window.ethereum);
+const signer = provider.getSigner();
+
+const contractAddress = '0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE';
+
+// Connect with signer to enable transactions
+const swapFacet = GenericSwapFacet__factory.connect(contractAddress, signer);
+
+// Execute a swap transaction
+const tx = await swapFacet.swapTokensGeneric(
+  transactionId,
+  integrator,
+  referrer,
+  receiver,
+  minAmount,
+  swapData
+);
+
+await tx.wait();
+```
+
+## Deploying Contracts
+
+<Note>
+Most users will connect to existing LiFi Diamond contracts rather than deploying new ones. This section is primarily for development and testing.
+</Note>
+
+### Deploy a Facet
+
+```typescript
+import { AcrossFacet__factory } from '@lifi/contract-types';
+
+// Create factory instance with signer
+const factory = new AcrossFacet__factory(signer);
+
+// Deploy the contract
+const acrossFacet = await factory.deploy(
+  spokePoolAddress,  // IAcrossSpokePool address
+  wrappedNativeAddress  // Wrapped native token address
+);
+
+await acrossFacet.deployed();
+console.log('AcrossFacet deployed to:', acrossFacet.address);
+```
+
+### Deploy the Diamond
+
+```typescript
+import { LiFiDiamond__factory } from '@lifi/contract-types';
+
+const factory = new LiFiDiamond__factory(signer);
+
+const diamond = await factory.deploy(
+  ownerAddress,      // Contract owner
+  diamondCutFacetAddress  // DiamondCutFacet address
+);
+
+await diamond.deployed();
+console.log('LiFi Diamond deployed to:', diamond.address);
+```
+
+## Working with Contract Instances
+
+### Reading Contract State
+
+```typescript
+import { AccessManagerFacet__factory } from '@lifi/contract-types';
+
+const accessManager = AccessManagerFacet__factory.connect(diamondAddress, provider);
+
+// Call view functions - no gas required
+const hasAccess = await accessManager.addressCanExecuteMethod(
+  '0x1234...', // selector
+  '0x5678...'  // executor address
+);
+```
+
+### Estimating Gas
+
+```typescript
+import { GenericSwapFacet__factory } from '@lifi/contract-types';
+
+const swapFacet = GenericSwapFacet__factory.connect(diamondAddress, signer);
+
+// Estimate gas for a transaction
+const gasEstimate = await swapFacet.estimateGas.swapTokensGeneric(
+  transactionId,
+  integrator,
+  referrer,
+  receiver,
+  minAmount,
+  swapData,
+  { value: ethers.utils.parseEther('0.1') }
+);
+
+console.log('Estimated gas:', gasEstimate.toString());
+```
+
+### Getting Transaction Data
+
+```typescript
+import { AcrossFacet__factory } from '@lifi/contract-types';
+
+const acrossFacet = AcrossFacet__factory.connect(diamondAddress, signer);
+
+// Get populated transaction without sending
+const populatedTx = await acrossFacet.populateTransaction.startBridgeTokensViaAcross(
+  bridgeData,
+  acrossData
+);
+
+console.log('Transaction data:', populatedTx.data);
+console.log('To:', populatedTx.to);
+```
+
+## Contract Interfaces
+
+### Creating an Interface
+
+You can create contract interfaces to encode/decode function calls:
+
+```typescript
+import { AcrossFacet__factory } from '@lifi/contract-types';
+
+// Create interface
+const iface = AcrossFacet__factory.createInterface();
+
+// Encode function call
+const calldata = iface.encodeFunctionData('startBridgeTokensViaAcross', [
+  bridgeData,
+  acrossData
+]);
+
+// Decode function call
+const decoded = iface.decodeFunctionData('startBridgeTokensViaAcross', calldata);
+```
+
+### Working with ABIs
+
+```typescript
+import { GenericSwapFacet__factory } from '@lifi/contract-types';
+
+// Access the ABI directly
+const abi = GenericSwapFacet__factory.abi;
+
+// Access bytecode
+const bytecode = GenericSwapFacet__factory.bytecode;
+
+// Use with other libraries
+import { Contract } from '@ethersproject/contracts';
+const contract = new Contract(address, abi, signer);
+```
+
+## Multiple Facets Pattern
+
+<Note>
+LiFi uses the Diamond pattern, where multiple facets share the same contract address. Each factory connects to the same Diamond address but provides different functionality.
+</Note>
+
+```typescript
+import { 
+  AcrossFacet__factory,
+  GenericSwapFacet__factory,
+  StargateFacet__factory 
+} from '@lifi/contract-types';
+
+const diamondAddress = '0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE';
+
+// Connect multiple facets to the same Diamond
+const acrossFacet = AcrossFacet__factory.connect(diamondAddress, signer);
+const swapFacet = GenericSwapFacet__factory.connect(diamondAddress, signer);
+const stargateFacet = StargateFacet__factory.connect(diamondAddress, signer);
+
+// Each facet provides different methods
+await acrossFacet.startBridgeTokensViaAcross(bridgeData, acrossData);
+await swapFacet.swapTokensGeneric(txId, integrator, referrer, receiver, minAmount, swapData);
+await stargateFacet.startBridgeTokensViaStargate(bridgeData, stargateData);
+```
+
+## Error Handling
+
+```typescript
+import { AcrossFacet__factory } from '@lifi/contract-types';
+import { ethers } from 'ethers';
+
+const acrossFacet = AcrossFacet__factory.connect(diamondAddress, signer);
+
+try {
+  const tx = await acrossFacet.startBridgeTokensViaAcross(bridgeData, acrossData);
+  await tx.wait();
+} catch (error) {
+  if (error.code === 'UNPREDICTABLE_GAS_LIMIT') {
+    console.error('Transaction would fail - insufficient funds or invalid parameters');
+  } else if (error.code === 'INSUFFICIENT_FUNDS') {
+    console.error('Insufficient funds for gas');
+  } else {
+    console.error('Transaction failed:', error.message);
+  }
+}
+```
+
+## Best Practices
+
+<Steps>
+
+### 1. Reuse Factory Instances
+
+Create factory instances once and reuse them:
+
+```typescript
+// Good
+const factory = AcrossFacet__factory.connect(diamondAddress, signer);
+const tx1 = await factory.startBridgeTokensViaAcross(data1, across1);
+const tx2 = await factory.startBridgeTokensViaAcross(data2, across2);
+
+// Avoid
+const tx1 = await AcrossFacet__factory.connect(addr, signer).startBridgeTokensViaAcross(...);
+const tx2 = await AcrossFacet__factory.connect(addr, signer).startBridgeTokensViaAcross(...);
+```
+
+### 2. Use Proper Provider Types
+
+Use `JsonRpcProvider` for read-only operations and `Web3Provider` for transactions:
+
+```typescript
+// Read-only operations
+const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+const facet = AcrossFacet__factory.connect(address, provider);
+
+// Transactions
+const web3Provider = new ethers.providers.Web3Provider(window.ethereum);
+const signer = web3Provider.getSigner();
+const facet = AcrossFacet__factory.connect(address, signer);
+```
+
+### 3. Handle Network Changes
+
+```typescript
+let facet: AcrossFacet;
+
+// Listen for network changes
+provider.on('network', (newNetwork, oldNetwork) => {
+  if (oldNetwork) {
+    // Network changed - reconnect
+    facet = AcrossFacet__factory.connect(diamondAddress, provider);
+  }
+});
+```
+
+</Steps>
+
+## Next Steps
+
+- [Bridge Integration](/guides/bridge-integration) - Build complete bridge integrations
+- [Swap Integration](/guides/swap-integration) - Implement DEX swap functionality  
+- [Event Handling](/guides/event-handling) - Listen to and filter contract events

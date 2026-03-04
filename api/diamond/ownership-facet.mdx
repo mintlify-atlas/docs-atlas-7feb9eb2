@@ -1,0 +1,248 @@
+---
+title: OwnershipFacet
+description: Manage diamond contract ownership with two-step transfer
+---
+
+The `OwnershipFacet` implements ownership management for the diamond contract using a secure two-step transfer process.
+
+## Functions
+
+### owner
+
+Returns the current owner address.
+
+```typescript
+function owner(): Promise<string>
+```
+
+### transferOwnership
+
+Initiates ownership transfer to a new address.
+
+```typescript
+function transferOwnership(_newOwner: string): Promise<ContractTransaction>
+```
+
+<ParamField path="_newOwner" type="address" required>
+  Address of the proposed new owner
+</ParamField>
+
+This function can only be called by the current owner. It sets the `_newOwner` as the pending owner but does not complete the transfer.
+
+### confirmOwnershipTransfer
+
+Confirms and completes the ownership transfer.
+
+```typescript
+function confirmOwnershipTransfer(): Promise<ContractTransaction>
+```
+
+This function must be called by the pending owner to complete the transfer. This two-step process prevents accidental transfers to incorrect addresses.
+
+### cancelOwnershipTransfer
+
+Cancels a pending ownership transfer.
+
+```typescript
+function cancelOwnershipTransfer(): Promise<ContractTransaction>
+```
+
+This function can only be called by the current owner to cancel a pending transfer.
+
+## Events
+
+### OwnershipTransferRequested
+
+Emitted when ownership transfer is initiated.
+
+<ParamField path="_from" type="address">
+  Current owner address
+</ParamField>
+
+<ParamField path="_to" type="address">
+  Proposed new owner address
+</ParamField>
+
+### OwnershipTransferred
+
+Emitted when ownership transfer is completed.
+
+<ParamField path="previousOwner" type="address">
+  Previous owner address
+</ParamField>
+
+<ParamField path="newOwner" type="address">
+  New owner address
+</ParamField>
+
+## Usage Examples
+
+### Check Current Owner
+
+```typescript
+import { OwnershipFacet__factory } from '@lifi/contract-types';
+import { ethers } from 'ethers';
+
+const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+const ownership = OwnershipFacet__factory.connect(DIAMOND_ADDRESS, provider);
+
+// Get current owner
+const currentOwner = await ownership.owner();
+console.log('Current owner:', currentOwner);
+```
+
+### Two-Step Ownership Transfer
+
+```typescript
+const signer = provider.getSigner();
+const ownership = OwnershipFacet__factory.connect(DIAMOND_ADDRESS, signer);
+
+const newOwnerAddress = '0xNEW_OWNER_ADDRESS';
+
+// Step 1: Current owner initiates transfer
+const tx1 = await ownership.transferOwnership(newOwnerAddress);
+await tx1.wait();
+console.log('Ownership transfer initiated');
+
+// Step 2: New owner confirms transfer
+const newOwnerSigner = provider.getSigner(newOwnerAddress);
+const ownershipAsNewOwner = ownership.connect(newOwnerSigner);
+
+const tx2 = await ownershipAsNewOwner.confirmOwnershipTransfer();
+await tx2.wait();
+console.log('Ownership transfer completed');
+
+// Verify new owner
+const updatedOwner = await ownership.owner();
+console.log('New owner:', updatedOwner);
+```
+
+### Cancel Pending Transfer
+
+```typescript
+const ownership = OwnershipFacet__factory.connect(DIAMOND_ADDRESS, signer);
+
+// Initiate transfer
+const tx1 = await ownership.transferOwnership('0xNEW_OWNER');
+await tx1.wait();
+
+// Cancel transfer
+const tx2 = await ownership.cancelOwnershipTransfer();
+await tx2.wait();
+console.log('Ownership transfer cancelled');
+```
+
+### Listen to Ownership Events
+
+```typescript
+const ownership = OwnershipFacet__factory.connect(DIAMOND_ADDRESS, provider);
+
+// Listen for transfer requests
+ownership.on('OwnershipTransferRequested', (from, to) => {
+  console.log('Ownership transfer requested:');
+  console.log('  From:', from);
+  console.log('  To:', to);
+});
+
+// Listen for completed transfers
+ownership.on('OwnershipTransferred', (previousOwner, newOwner) => {
+  console.log('Ownership transferred:');
+  console.log('  Previous:', previousOwner);
+  console.log('  New:', newOwner);
+});
+```
+
+### Safe Transfer Helper
+
+```typescript
+async function safeTransferOwnership(
+  ownership: OwnershipFacet,
+  newOwner: string
+): Promise<void> {
+  const currentOwner = await ownership.owner();
+  console.log('Current owner:', currentOwner);
+  console.log('Transferring to:', newOwner);
+  
+  // Initiate transfer
+  const tx = await ownership.transferOwnership(newOwner);
+  const receipt = await tx.wait();
+  
+  console.log('Transfer initiated in tx:', receipt.transactionHash);
+  console.log('New owner must call confirmOwnershipTransfer() to complete');
+}
+
+// Usage
+await safeTransferOwnership(ownership, '0xNEW_OWNER');
+```
+
+### Verify Ownership Before Actions
+
+```typescript
+async function requireOwnership(
+  ownership: OwnershipFacet,
+  signer: ethers.Signer
+): Promise<void> {
+  const currentOwner = await ownership.owner();
+  const signerAddress = await signer.getAddress();
+  
+  if (currentOwner.toLowerCase() !== signerAddress.toLowerCase()) {
+    throw new Error(`Not owner. Current owner: ${currentOwner}`);
+  }
+}
+
+// Usage
+await requireOwnership(ownership, signer);
+// Proceed with owner-only action
+```
+
+## Security Considerations
+
+### Two-Step Transfer Benefits
+
+The two-step transfer process provides several security benefits:
+
+1. **Prevents Typos**: The new owner must actively confirm, preventing transfers to incorrect addresses
+2. **Verifies Access**: Ensures the new owner has access to the private key for the address
+3. **Allows Cancellation**: Current owner can cancel if they made a mistake
+4. **Transparent Process**: Events make the transfer process auditable
+
+### Best Practices
+
+```typescript
+// Always verify the new owner address before initiating transfer
+const newOwner = '0x...';
+
+// Check it's a valid address
+if (!ethers.utils.isAddress(newOwner)) {
+  throw new Error('Invalid address');
+}
+
+// Check it's not the zero address
+if (newOwner === ethers.constants.AddressZero) {
+  throw new Error('Cannot transfer to zero address');
+}
+
+// Check it's not the current owner
+const currentOwner = await ownership.owner();
+if (newOwner.toLowerCase() === currentOwner.toLowerCase()) {
+  throw new Error('Already the owner');
+}
+
+// Proceed with transfer
+await ownership.transferOwnership(newOwner);
+```
+
+### Multi-Sig Ownership
+
+```typescript
+// For multi-sig wallets, ensure proper coordination
+const multisigAddress = '0xMULTISIG_ADDRESS';
+
+// Step 1: Multi-sig initiates transfer
+// (requires signatures from multi-sig owners)
+await ownership.transferOwnership(multisigAddress);
+
+// Step 2: Multi-sig confirms transfer
+// (requires another round of signatures)
+await multisigOwnership.confirmOwnershipTransfer();
+```
