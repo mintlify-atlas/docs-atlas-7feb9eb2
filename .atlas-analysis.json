@@ -1,0 +1,129 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "LiFi Contract Types",
+  "projectDescription": "TypeScript type definitions and contract interfaces for LiFi cross-chain bridge protocol smart contracts",
+  "theme": "sequoia",
+  "primaryColor": "#7C3AED",
+  "lightColor": "#A78BFA",
+  "darkColor": "#5B21B6",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/overview",
+              "concepts/bridge-data",
+              "concepts/swap-data",
+              "concepts/facets"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/using-factories",
+              "guides/bridge-integration",
+              "guides/swap-integration",
+              "guides/event-handling"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core Types",
+            "pages": [
+              "api/core/ilifi",
+              "api/core/lifi-diamond",
+              "api/core/lib-swap"
+            ]
+          },
+          {
+            "group": "Bridge Facets",
+            "pages": [
+              "api/bridges/across-facet",
+              "api/bridges/hop-facet",
+              "api/bridges/stargate-facet",
+              "api/bridges/cbridge-facet",
+              "api/bridges/all-bridge-facet",
+              "api/bridges/arbitrum-bridge-facet",
+              "api/bridges/optimism-bridge-facet",
+              "api/bridges/polygon-bridge-facet",
+              "api/bridges/gnosis-bridge-facet"
+            ]
+          },
+          {
+            "group": "Swap Facets",
+            "pages": [
+              "api/swaps/generic-swap-facet",
+              "api/swaps/swapper-v2"
+            ]
+          },
+          {
+            "group": "Utility Facets",
+            "pages": [
+              "api/utilities/executor",
+              "api/utilities/fee-collector",
+              "api/utilities/withdraw-facet",
+              "api/utilities/whitelist-manager-facet",
+              "api/utilities/access-manager-facet"
+            ]
+          },
+          {
+            "group": "Diamond Standard",
+            "pages": [
+              "api/diamond/diamond-cut-facet",
+              "api/diamond/diamond-loupe-facet",
+              "api/diamond/ownership-facet"
+            ]
+          },
+          {
+            "group": "Contract Factories",
+            "pages": [
+              "api/factories/overview",
+              "api/factories/usage"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Complete TypeScript typings for LiFi smart contracts",
+    "Support for 20+ cross-chain bridge protocols",
+    "Ethers.js v5 integration with contract factories",
+    "Diamond pattern (EIP-2535) facet architecture",
+    "Comprehensive event and struct type definitions",
+    "Type-safe contract interactions"
+  ],
+  "publicApiSurface": [
+    "ILiFi - Core LiFi interface with BridgeData types",
+    "AcrossFacet - Across Protocol bridge integration",
+    "HopFacet - Hop Protocol bridge integration",
+    "StargateFacetV2 - Stargate V2 bridge integration",
+    "CBridgeFacet - Celer cBridge integration",
+    "GenericSwapFacet - Generic DEX swap functionality",
+    "SwapperV2 - Advanced swap aggregator",
+    "LiFiDiamond - Main diamond proxy contract",
+    "Executor - Transaction execution contract",
+    "DiamondCutFacet - Diamond upgrade functionality",
+    "DiamondLoupeFacet - Diamond introspection",
+    "OwnershipFacet - Contract ownership management",
+    "FeeCollector - Fee collection and distribution",
+    "WhitelistManagerFacet - Address whitelist management",
+    "Permit2Proxy - ERC20 Permit2 integration",
+    "factories - Contract factory exports for all facets"
+  ]
+}
