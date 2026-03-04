@@ -1,0 +1,184 @@
+---
+title: DeBridgeDlnFacet
+description: Bridge tokens across chains using deBridge DLN (Deswap Liquidity Network)
+---
+
+## Overview
+
+The `DeBridgeDlnFacet` enables cross-chain token transfers using deBridge's DLN (Deswap Liquidity Network). DLN provides fast and efficient cross-chain transfers with competitive pricing.
+
+## Contract Interface
+
+### Constants
+
+#### DLN_SOURCE
+
+Returns the address of the DLN source contract.
+
+```typescript
+function DLN_SOURCE() external view returns (address)
+```
+
+### Configuration Functions
+
+#### initDeBridgeDln
+
+Initializes deBridge DLN with chain ID mappings.
+
+```typescript
+function initDeBridgeDln(ChainIdConfig[] chainIdConfigs) external
+```
+
+<ParamField path="chainIdConfigs" type="ChainIdConfig[]">
+  Array of chain ID configurations
+  
+  <Expandable title="ChainIdConfig fields">
+    <ParamField path="chainId" type="uint256">Standard chain ID</ParamField>
+    <ParamField path="deBridgeChainId" type="uint256">deBridge chain ID</ParamField>
+  </Expandable>
+</ParamField>
+
+#### setDeBridgeChainId
+
+Sets a deBridge chain ID for a specific chain.
+
+```typescript
+function setDeBridgeChainId(uint256 _chainId, uint256 _deBridgeChainId) external
+```
+
+<ParamField path="_chainId" type="uint256">Standard chain ID</ParamField>
+<ParamField path="_deBridgeChainId" type="uint256">deBridge chain ID</ParamField>
+
+#### getDeBridgeChainId
+
+Retrieves the deBridge chain ID for a given chain.
+
+```typescript
+function getDeBridgeChainId(uint256 _chainId) external view returns (uint256)
+```
+
+<ParamField path="_chainId" type="uint256">Standard chain ID</ParamField>
+
+### Bridging Functions
+
+#### startBridgeTokensViaDeBridgeDln
+
+Bridges tokens to another chain using deBridge DLN.
+
+```typescript
+function startBridgeTokensViaDeBridgeDln(
+  BridgeData _bridgeData,
+  DeBridgeDlnData _deBridgeData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data containing transaction details
+</ParamField>
+
+<ParamField path="_deBridgeData" type="DeBridgeDlnData">
+  deBridge DLN-specific bridging parameters
+  
+  <Expandable title="DeBridgeDlnData fields">
+    <ParamField path="receivingAssetId" type="bytes">Asset to receive on destination</ParamField>
+    <ParamField path="receiver" type="bytes">Receiver address</ParamField>
+    <ParamField path="orderAuthorityDst" type="bytes">Order authority on destination</ParamField>
+    <ParamField path="minAmountOut" type="uint256">Minimum amount to receive</ParamField>
+  </Expandable>
+</ParamField>
+
+#### swapAndStartBridgeTokensViaDeBridgeDln
+
+Performs a token swap on the source chain before bridging via deBridge DLN.
+
+```typescript
+function swapAndStartBridgeTokensViaDeBridgeDln(
+  BridgeData _bridgeData,
+  SwapData[] _swapData,
+  DeBridgeDlnData _deBridgeData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data
+</ParamField>
+
+<ParamField path="_swapData" type="SwapData[]">
+  Array of swap operations to execute before bridging
+</ParamField>
+
+<ParamField path="_deBridgeData" type="DeBridgeDlnData">
+  deBridge DLN-specific parameters
+</ParamField>
+
+## Data Structures
+
+### DeBridgeDlnData
+
+```typescript
+struct DeBridgeDlnData {
+  bytes receivingAssetId;      // Receiving asset
+  bytes receiver;              // Receiver address
+  bytes orderAuthorityDst;     // Order authority
+  uint256 minAmountOut;        // Min output amount
+}
+```
+
+### ChainIdConfig
+
+```typescript
+struct ChainIdConfig {
+  uint256 chainId;           // Standard chain ID
+  uint256 deBridgeChainId;   // deBridge chain ID
+}
+```
+
+## Usage Example
+
+```typescript
+import { DeBridgeDlnFacet } from '@lifi/contract-types';
+
+const deBridgeFacet = DeBridgeDlnFacet__factory.connect(facetAddress, signer);
+
+const bridgeData = {
+  transactionId: '0x...',
+  bridge: 'debridge-dln',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+  receiver: '0x...',
+  minAmount: ethers.utils.parseUnits('100', 6),
+  destinationChainId: 137, // Polygon
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+const deBridgeData = {
+  receivingAssetId: ethers.utils.hexlify(ethers.utils.toUtf8Bytes('0x...')),
+  receiver: ethers.utils.hexlify(ethers.utils.toUtf8Bytes('0x...')),
+  orderAuthorityDst: '0x00',
+  minAmountOut: ethers.utils.parseUnits('99', 6)
+};
+
+const tx = await deBridgeFacet.startBridgeTokensViaDeBridgeDln(
+  bridgeData,
+  deBridgeData,
+  { value: 0 }
+);
+
+await tx.wait();
+```
+
+## Events
+
+- `DeBridgeInitialized(ChainIdConfig[] chainIdConfigs)` - Emitted when DLN is initialized
+- `DeBridgeChainIdSet(uint256 chainId, uint256 deBridgeChainId)` - Emitted when chain ID mapping is set
+- `DlnOrderCreated(bytes32 orderId)` - Emitted when a DLN order is created
+- `LiFiTransferStarted(BridgeData bridgeData)` - Standard transfer event
+- `AssetSwapped` (when using swapAndStart variant)
+
+## See Also
+
+- [deBridge Documentation](https://docs.debridge.finance/)
+- [BridgeData Reference](/concepts/bridge-data)
+- [SwapData Reference](/concepts/swap-data)

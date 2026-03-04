@@ -1,0 +1,123 @@
+---
+title: ThorSwapFacet
+description: Bridge tokens across chains using THORChain via ThorSwap
+---
+
+## Overview
+
+The `ThorSwapFacet` enables cross-chain token transfers using THORChain through the ThorSwap interface. THORChain provides decentralized cross-chain liquidity without wrapped tokens.
+
+## Contract Interface
+
+### Bridging Functions
+
+#### startBridgeTokensViaThorSwap
+
+Bridges tokens to another chain using THORChain.
+
+```typescript
+function startBridgeTokensViaThorSwap(
+  BridgeData _bridgeData,
+  ThorSwapData _thorSwapData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data containing transaction details
+</ParamField>
+
+<ParamField path="_thorSwapData" type="ThorSwapData">
+  ThorSwap-specific bridging parameters
+  
+  <Expandable title="ThorSwapData fields">
+    <ParamField path="vault" type="address">THORChain vault address</ParamField>
+    <ParamField path="memo" type="string">THORChain memo for routing</ParamField>
+    <ParamField path="expiration" type="uint256">Transaction expiration timestamp</ParamField>
+  </Expandable>
+</ParamField>
+
+#### swapAndStartBridgeTokensViaThorSwap
+
+Performs a token swap on the source chain before bridging via THORChain.
+
+```typescript
+function swapAndStartBridgeTokensViaThorSwap(
+  BridgeData _bridgeData,
+  SwapData[] _swapData,
+  ThorSwapData _thorSwapData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data
+</ParamField>
+
+<ParamField path="_swapData" type="SwapData[]">
+  Array of swap operations to execute before bridging
+</ParamField>
+
+<ParamField path="_thorSwapData" type="ThorSwapData">
+  ThorSwap-specific parameters
+</ParamField>
+
+## Data Structures
+
+### ThorSwapData
+
+```typescript
+struct ThorSwapData {
+  address vault;        // THORChain vault
+  string memo;          // THORChain memo
+  uint256 expiration;   // Expiration timestamp
+}
+```
+
+## Usage Example
+
+```typescript
+import { ThorSwapFacet } from '@lifi/contract-types';
+
+const thorSwapFacet = ThorSwapFacet__factory.connect(facetAddress, signer);
+
+const bridgeData = {
+  transactionId: '0x...',
+  bridge: 'thorswap',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+  receiver: '0x...',
+  minAmount: ethers.utils.parseUnits('100', 6),
+  destinationChainId: 1, // Ethereum (or other chain)
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+const thorSwapData = {
+  vault: '0x...', // THORChain vault
+  memo: '=:ETH.ETH:0x...',
+  expiration: Math.floor(Date.now() / 1000) + 3600
+};
+
+const tx = await thorSwapFacet.startBridgeTokensViaThorSwap(
+  bridgeData,
+  thorSwapData,
+  { value: 0 }
+);
+
+await tx.wait();
+```
+
+## Events
+
+The facet emits standard LiFi events:
+
+- `LiFiTransferStarted(BridgeData bridgeData)`
+- `LiFiTransferCompleted`
+- `AssetSwapped` (when using swapAndStart variant)
+
+## See Also
+
+- [THORChain Documentation](https://docs.thorchain.org/)
+- [ThorSwap Documentation](https://docs.thorswap.finance/)
+- [BridgeData Reference](/concepts/bridge-data)
+- [SwapData Reference](/concepts/swap-data)

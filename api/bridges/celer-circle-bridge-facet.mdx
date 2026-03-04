@@ -1,0 +1,147 @@
+---
+title: CelerCircleBridgeFacet
+description: Bridge USDC using Circle's CCTP via Celer
+---
+
+## Overview
+
+The `CelerCircleBridgeFacet` enables USDC transfers across chains using Circle's Cross-Chain Transfer Protocol (CCTP) through the Celer network. This provides native USDC transfers without wrapped tokens.
+
+## Contract Interface
+
+### Constants
+
+#### CIRCLE_BRIDGE_PROXY
+
+Returns the address of the Circle bridge proxy contract.
+
+```typescript
+function CIRCLE_BRIDGE_PROXY() external view returns (address)
+```
+
+#### USDC
+
+Returns the address of the USDC token contract.
+
+```typescript
+function USDC() external view returns (address)
+```
+
+### Configuration Functions
+
+#### initCelerCircleBridge
+
+Initializes the Celer Circle Bridge facet.
+
+```typescript
+function initCelerCircleBridge() external
+```
+
+### Bridging Functions
+
+#### startBridgeTokensViaCelerCircleBridge
+
+Bridges USDC to another chain using Circle's CCTP.
+
+```typescript
+function startBridgeTokensViaCelerCircleBridge(
+  BridgeData _bridgeData,
+  CelerCircleData _celerCircleData
+) external
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data containing transaction details
+</ParamField>
+
+<ParamField path="_celerCircleData" type="CelerCircleData">
+  Celer Circle-specific bridging parameters
+  
+  <Expandable title="CelerCircleData fields">
+    <ParamField path="maxFee" type="uint256">Maximum bridge fee</ParamField>
+    <ParamField path="minFinalityThreshold" type="uint32">Minimum finality threshold</ParamField>
+  </Expandable>
+</ParamField>
+
+#### swapAndStartBridgeTokensViaCelerCircleBridge
+
+Performs a token swap on the source chain before bridging via Circle's CCTP.
+
+```typescript
+function swapAndStartBridgeTokensViaCelerCircleBridge(
+  BridgeData _bridgeData,
+  SwapData[] _swapData,
+  CelerCircleData _celerCircleData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data
+</ParamField>
+
+<ParamField path="_swapData" type="SwapData[]">
+  Array of swap operations to execute before bridging
+</ParamField>
+
+<ParamField path="_celerCircleData" type="CelerCircleData">
+  Celer Circle-specific parameters
+</ParamField>
+
+## Data Structures
+
+### CelerCircleData
+
+```typescript
+struct CelerCircleData {
+  uint256 maxFee;                  // Maximum bridge fee
+  uint32 minFinalityThreshold;     // Minimum finality threshold
+}
+```
+
+## Usage Example
+
+```typescript
+import { CelerCircleBridgeFacet } from '@lifi/contract-types';
+
+const celerCircleFacet = CelerCircleBridgeFacet__factory.connect(facetAddress, signer);
+
+const bridgeData = {
+  transactionId: '0x...',
+  bridge: 'celer-circle',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+  receiver: '0x...',
+  minAmount: ethers.utils.parseUnits('100', 6),
+  destinationChainId: 43114, // Avalanche
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+const celerCircleData = {
+  maxFee: ethers.utils.parseUnits('0.5', 6),
+  minFinalityThreshold: 12
+};
+
+const tx = await celerCircleFacet.startBridgeTokensViaCelerCircleBridge(
+  bridgeData,
+  celerCircleData
+);
+
+await tx.wait();
+```
+
+## Events
+
+The facet emits standard LiFi events:
+
+- `LiFiTransferStarted(BridgeData bridgeData)`
+- `LiFiTransferCompleted`
+- `AssetSwapped` (when using swapAndStart variant)
+
+## See Also
+
+- [Circle CCTP Documentation](https://developers.circle.com/stablecoins/docs/cctp-getting-started)
+- [Celer Documentation](https://celer-network.gitbook.io/)
+- [BridgeData Reference](/concepts/bridge-data)
+- [SwapData Reference](/concepts/swap-data)

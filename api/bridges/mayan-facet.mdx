@@ -1,0 +1,134 @@
+---
+title: MayanFacet
+description: Bridge tokens across chains using Mayan Protocol
+---
+
+## Overview
+
+The `MayanFacet` enables cross-chain token transfers using the Mayan Protocol. Mayan provides fast cross-chain swaps with support for non-EVM chains.
+
+## Contract Interface
+
+### Constants
+
+#### MAYAN
+
+Returns the address of the Mayan protocol contract.
+
+```typescript
+function MAYAN() external view returns (address)
+```
+
+### Bridging Functions
+
+#### startBridgeTokensViaMayan
+
+Bridges tokens to another chain using Mayan Protocol.
+
+```typescript
+function startBridgeTokensViaMayan(
+  BridgeData _bridgeData,
+  MayanData _mayanData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data containing transaction details
+</ParamField>
+
+<ParamField path="_mayanData" type="MayanData">
+  Mayan-specific bridging parameters
+  
+  <Expandable title="MayanData fields">
+    <ParamField path="nonEVMReceiver" type="bytes32">Receiver address on non-EVM chains</ParamField>
+    <ParamField path="mayanProtocol" type="address">Mayan protocol contract address</ParamField>
+    <ParamField path="protocolData" type="bytes">Protocol-specific data</ParamField>
+  </Expandable>
+</ParamField>
+
+#### swapAndStartBridgeTokensViaMayan
+
+Performs a token swap on the source chain before bridging via Mayan.
+
+```typescript
+function swapAndStartBridgeTokensViaMayan(
+  BridgeData _bridgeData,
+  SwapData[] _swapData,
+  MayanData _mayanData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data
+</ParamField>
+
+<ParamField path="_swapData" type="SwapData[]">
+  Array of swap operations to execute before bridging
+</ParamField>
+
+<ParamField path="_mayanData" type="MayanData">
+  Mayan-specific parameters
+</ParamField>
+
+## Data Structures
+
+### MayanData
+
+```typescript
+struct MayanData {
+  bytes32 nonEVMReceiver;    // Receiver on non-EVM chains
+  address mayanProtocol;     // Mayan protocol contract
+  bytes protocolData;        // Protocol data
+}
+```
+
+## Usage Example
+
+```typescript
+import { MayanFacet } from '@lifi/contract-types';
+
+const mayanFacet = MayanFacet__factory.connect(facetAddress, signer);
+
+const bridgeData = {
+  transactionId: '0x...',
+  bridge: 'mayan',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+  receiver: '0x...',
+  minAmount: ethers.utils.parseUnits('100', 6),
+  destinationChainId: 501, // Solana
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+const mayanData = {
+  nonEVMReceiver: '0x...', // Solana address as bytes32
+  mayanProtocol: '0x...', // Mayan protocol address
+  protocolData: '0x...'
+};
+
+const tx = await mayanFacet.startBridgeTokensViaMayan(
+  bridgeData,
+  mayanData,
+  { value: 0 }
+);
+
+await tx.wait();
+```
+
+## Events
+
+The facet emits standard LiFi events:
+
+- `LiFiTransferStarted(BridgeData bridgeData)`
+- `LiFiTransferCompleted`
+- `AssetSwapped` (when using swapAndStart variant)
+- `BridgeToNonEVMChain` (for non-EVM destinations)
+- `BridgeToNonEVMChainBytes32` (for non-EVM destinations with bytes32 receiver)
+
+## See Also
+
+- [Mayan Protocol Documentation](https://docs.mayan.finance/)
+- [BridgeData Reference](/concepts/bridge-data)
+- [SwapData Reference](/concepts/swap-data)

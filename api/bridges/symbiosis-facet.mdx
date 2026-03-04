@@ -1,0 +1,137 @@
+---
+title: SymbiosisFacet
+description: Bridge tokens across chains using Symbiosis Protocol
+---
+
+## Overview
+
+The `SymbiosisFacet` enables cross-chain token transfers using the Symbiosis Protocol. Symbiosis supports complex cross-chain swaps with intermediate tokens and multiple DEX routers.
+
+## Contract Interface
+
+### Bridging Functions
+
+#### startBridgeTokensViaSymbiosis
+
+Bridges tokens to another chain using Symbiosis Protocol.
+
+```typescript
+function startBridgeTokensViaSymbiosis(
+  BridgeData _bridgeData,
+  SymbiosisData _symbiosisData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data containing transaction details
+</ParamField>
+
+<ParamField path="_symbiosisData" type="SymbiosisData">
+  Symbiosis-specific bridging parameters
+  
+  <Expandable title="SymbiosisData fields">
+    <ParamField path="firstSwapCalldata" type="bytes">Calldata for first swap</ParamField>
+    <ParamField path="secondSwapCalldata" type="bytes">Calldata for second swap</ParamField>
+    <ParamField path="intermediateToken" type="address">Intermediate token address</ParamField>
+    <ParamField path="firstDexRouter" type="address">First DEX router address</ParamField>
+    <ParamField path="secondDexRouter" type="address">Second DEX router address</ParamField>
+    <ParamField path="approvedTokens" type="address[]">Tokens to approve</ParamField>
+    <ParamField path="callTo" type="address">Contract to call</ParamField>
+    <ParamField path="callData" type="bytes">Call data for bridge</ParamField>
+  </Expandable>
+</ParamField>
+
+#### swapAndStartBridgeTokensViaSymbiosis
+
+Performs a token swap on the source chain before bridging via Symbiosis.
+
+```typescript
+function swapAndStartBridgeTokensViaSymbiosis(
+  BridgeData _bridgeData,
+  SwapData[] _swapData,
+  SymbiosisData _symbiosisData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data
+</ParamField>
+
+<ParamField path="_swapData" type="SwapData[]">
+  Array of swap operations to execute before bridging
+</ParamField>
+
+<ParamField path="_symbiosisData" type="SymbiosisData">
+  Symbiosis-specific parameters
+</ParamField>
+
+## Data Structures
+
+### SymbiosisData
+
+```typescript
+struct SymbiosisData {
+  bytes firstSwapCalldata;       // First swap calldata
+  bytes secondSwapCalldata;      // Second swap calldata
+  address intermediateToken;     // Intermediate token
+  address firstDexRouter;        // First DEX router
+  address secondDexRouter;       // Second DEX router
+  address[] approvedTokens;      // Tokens to approve
+  address callTo;                // Bridge contract
+  bytes callData;                // Bridge calldata
+}
+```
+
+## Usage Example
+
+```typescript
+import { SymbiosisFacet } from '@lifi/contract-types';
+
+const symbiosisFacet = SymbiosisFacet__factory.connect(facetAddress, signer);
+
+const bridgeData = {
+  transactionId: '0x...',
+  bridge: 'symbiosis',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+  receiver: '0x...',
+  minAmount: ethers.utils.parseUnits('100', 6),
+  destinationChainId: 56, // BSC
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+const symbiosisData = {
+  firstSwapCalldata: '0x...',
+  secondSwapCalldata: '0x...',
+  intermediateToken: '0x...',
+  firstDexRouter: '0x...',
+  secondDexRouter: '0x...',
+  approvedTokens: ['0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'],
+  callTo: '0x...', // Symbiosis Portal
+  callData: '0x...'
+};
+
+const tx = await symbiosisFacet.startBridgeTokensViaSymbiosis(
+  bridgeData,
+  symbiosisData,
+  { value: 0 }
+);
+
+await tx.wait();
+```
+
+## Events
+
+The facet emits standard LiFi events:
+
+- `LiFiTransferStarted(BridgeData bridgeData)`
+- `LiFiTransferCompleted`
+- `AssetSwapped` (when using swapAndStart variant)
+
+## See Also
+
+- [Symbiosis Protocol Documentation](https://docs.symbiosis.finance/)
+- [BridgeData Reference](/concepts/bridge-data)
+- [SwapData Reference](/concepts/swap-data)

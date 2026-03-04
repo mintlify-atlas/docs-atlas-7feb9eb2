@@ -1,0 +1,152 @@
+---
+title: SquidFacet
+description: Bridge tokens across chains using Squid Protocol
+---
+
+## Overview
+
+The `SquidFacet` enables cross-chain token transfers using the Squid Protocol. Squid provides efficient cross-chain swaps and supports multiple route types with express execution.
+
+## Contract Interface
+
+### Bridging Functions
+
+#### startBridgeTokensViaSquid
+
+Bridges tokens to another chain using Squid Protocol.
+
+```typescript
+function startBridgeTokensViaSquid(
+  BridgeData _bridgeData,
+  SquidData _squidData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data containing transaction details
+</ParamField>
+
+<ParamField path="_squidData" type="SquidData">
+  Squid-specific bridging parameters
+  
+  <Expandable title="SquidData fields">
+    <ParamField path="routeType" type="uint8">Route type identifier</ParamField>
+    <ParamField path="destinationChain" type="string">Destination chain identifier</ParamField>
+    <ParamField path="destinationAddress" type="string">Recipient address on destination</ParamField>
+    <ParamField path="bridgedTokenSymbol" type="string">Symbol of bridged token</ParamField>
+    <ParamField path="depositAssetId" type="address">Asset to deposit</ParamField>
+    <ParamField path="sourceCalls" type="Call[]">Calls to execute on source chain</ParamField>
+    <ParamField path="payload" type="bytes">Additional payload data</ParamField>
+    <ParamField path="fee" type="uint256">Bridge fee amount</ParamField>
+    <ParamField path="enableExpress" type="bool">Enable express execution</ParamField>
+  </Expandable>
+</ParamField>
+
+#### swapAndStartBridgeTokensViaSquid
+
+Performs a token swap on the source chain before bridging via Squid.
+
+```typescript
+function swapAndStartBridgeTokensViaSquid(
+  BridgeData _bridgeData,
+  SwapData[] _swapData,
+  SquidData _squidData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data
+</ParamField>
+
+<ParamField path="_swapData" type="SwapData[]">
+  Array of swap operations to execute before bridging
+</ParamField>
+
+<ParamField path="_squidData" type="SquidData">
+  Squid-specific parameters
+</ParamField>
+
+## Data Structures
+
+### SquidData
+
+```typescript
+struct SquidData {
+  uint8 routeType;               // Route type
+  string destinationChain;       // Destination chain ID
+  string destinationAddress;     // Destination address
+  string bridgedTokenSymbol;     // Token symbol
+  address depositAssetId;        // Deposit asset
+  Call[] sourceCalls;            // Source chain calls
+  bytes payload;                 // Additional payload
+  uint256 fee;                   // Bridge fee
+  bool enableExpress;            // Express execution flag
+}
+```
+
+### Call
+
+```typescript
+struct Call {
+  uint8 callType;    // Type of call
+  address target;    // Target contract
+  uint256 value;     // Value to send
+  bytes callData;    // Call data
+  bytes payload;     // Additional payload
+}
+```
+
+## Usage Example
+
+```typescript
+import { SquidFacet } from '@lifi/contract-types';
+
+const squidFacet = SquidFacet__factory.connect(facetAddress, signer);
+
+const bridgeData = {
+  transactionId: '0x...',
+  bridge: 'squid',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+  receiver: '0x...',
+  minAmount: ethers.utils.parseUnits('100', 6),
+  destinationChainId: 43114, // Avalanche
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+const squidData = {
+  routeType: 0,
+  destinationChain: '43114',
+  destinationAddress: '0x...',
+  bridgedTokenSymbol: 'USDC',
+  depositAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+  sourceCalls: [],
+  payload: '0x',
+  fee: ethers.utils.parseUnits('0.1', 6),
+  enableExpress: true
+};
+
+const tx = await squidFacet.startBridgeTokensViaSquid(
+  bridgeData,
+  squidData,
+  { value: 0 }
+);
+
+await tx.wait();
+```
+
+## Events
+
+The facet emits standard LiFi events:
+
+- `LiFiTransferStarted(BridgeData bridgeData)`
+- `LiFiTransferCompleted`
+- `AssetSwapped` (when using swapAndStart variant)
+
+## See Also
+
+- [Squid Protocol Documentation](https://docs.squidrouter.com/)
+- [BridgeData Reference](/concepts/bridge-data)
+- [SwapData Reference](/concepts/swap-data)

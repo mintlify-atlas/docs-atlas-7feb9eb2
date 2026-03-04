@@ -1,0 +1,143 @@
+---
+title: ChainflipFacet
+description: Bridge tokens across chains using Chainflip Protocol
+---
+
+## Overview
+
+The `ChainflipFacet` enables cross-chain token transfers using the Chainflip Protocol. Chainflip supports bridging to non-EVM chains and includes destination call functionality.
+
+## Contract Interface
+
+### Constants
+
+#### CHAINFLIP_VAULT
+
+Returns the address of the Chainflip vault contract.
+
+```typescript
+function CHAINFLIP_VAULT() external view returns (address)
+```
+
+### Bridging Functions
+
+#### startBridgeTokensViaChainflip
+
+Bridges tokens to another chain using Chainflip Protocol.
+
+```typescript
+function startBridgeTokensViaChainflip(
+  BridgeData _bridgeData,
+  ChainflipData _chainflipData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data containing transaction details
+</ParamField>
+
+<ParamField path="_chainflipData" type="ChainflipData">
+  Chainflip-specific bridging parameters
+  
+  <Expandable title="ChainflipData fields">
+    <ParamField path="nonEVMReceiver" type="bytes">Receiver address on non-EVM chains</ParamField>
+    <ParamField path="dstToken" type="uint32">Destination token identifier</ParamField>
+    <ParamField path="dstCallReceiver" type="address">Receiver for destination call</ParamField>
+    <ParamField path="dstCallSwapData" type="SwapData[]">Swap data for destination chain</ParamField>
+    <ParamField path="gasAmount" type="uint256">Gas amount for destination execution</ParamField>
+    <ParamField path="cfParameters" type="bytes">Additional Chainflip parameters</ParamField>
+  </Expandable>
+</ParamField>
+
+#### swapAndStartBridgeTokensViaChainflip
+
+Performs a token swap on the source chain before bridging via Chainflip.
+
+```typescript
+function swapAndStartBridgeTokensViaChainflip(
+  BridgeData _bridgeData,
+  SwapData[] _swapData,
+  ChainflipData _chainflipData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data
+</ParamField>
+
+<ParamField path="_swapData" type="SwapData[]">
+  Array of swap operations to execute before bridging
+</ParamField>
+
+<ParamField path="_chainflipData" type="ChainflipData">
+  Chainflip-specific parameters
+</ParamField>
+
+## Data Structures
+
+### ChainflipData
+
+```typescript
+struct ChainflipData {
+  bytes nonEVMReceiver;          // Receiver on non-EVM chains
+  uint32 dstToken;               // Destination token ID
+  address dstCallReceiver;       // Destination call receiver
+  SwapData[] dstCallSwapData;    // Destination swap data
+  uint256 gasAmount;             // Gas for destination
+  bytes cfParameters;            // Chainflip parameters
+}
+```
+
+## Usage Example
+
+```typescript
+import { ChainflipFacet } from '@lifi/contract-types';
+
+const chainflipFacet = ChainflipFacet__factory.connect(facetAddress, signer);
+
+const bridgeData = {
+  transactionId: '0x...',
+  bridge: 'chainflip',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+  receiver: '0x...',
+  minAmount: ethers.utils.parseUnits('100', 6),
+  destinationChainId: 1, // Bitcoin (non-EVM)
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+const chainflipData = {
+  nonEVMReceiver: ethers.utils.toUtf8Bytes('bc1q...'), // Bitcoin address
+  dstToken: 0,
+  dstCallReceiver: '0x0000000000000000000000000000000000000000',
+  dstCallSwapData: [],
+  gasAmount: 0,
+  cfParameters: '0x'
+};
+
+const tx = await chainflipFacet.startBridgeTokensViaChainflip(
+  bridgeData,
+  chainflipData,
+  { value: 0 }
+);
+
+await tx.wait();
+```
+
+## Events
+
+The facet emits standard LiFi events:
+
+- `LiFiTransferStarted(BridgeData bridgeData)`
+- `LiFiTransferCompleted`
+- `AssetSwapped` (when using swapAndStart variant)
+- `BridgeToNonEVMChain` (for non-EVM destinations)
+- `BridgeToNonEVMChainBytes32` (for non-EVM destinations with bytes32 receiver)
+
+## See Also
+
+- [Chainflip Documentation](https://docs.chainflip.io/)
+- [BridgeData Reference](/concepts/bridge-data)
+- [SwapData Reference](/concepts/swap-data)

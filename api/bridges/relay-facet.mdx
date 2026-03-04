@@ -1,0 +1,155 @@
+---
+title: RelayFacet
+description: Bridge tokens across chains using Relay Protocol
+---
+
+## Overview
+
+The `RelayFacet` enables cross-chain token transfers using the Relay Protocol. Relay provides fast and secure cross-chain transfers with support for non-EVM chains.
+
+## Contract Interface
+
+### State Functions
+
+#### relayReceiver
+
+Returns the address of the Relay receiver contract.
+
+```typescript
+function relayReceiver() external view returns (address)
+```
+
+#### relaySolver
+
+Returns the address of the Relay solver.
+
+```typescript
+function relaySolver() external view returns (address)
+```
+
+#### consumedIds
+
+Checks if a request ID has been consumed.
+
+```typescript
+function consumedIds(bytes32 requestId) external view returns (bool)
+```
+
+<ParamField path="requestId" type="bytes32">Request ID to check</ParamField>
+
+### Bridging Functions
+
+#### startBridgeTokensViaRelay
+
+Bridges tokens to another chain using Relay Protocol.
+
+```typescript
+function startBridgeTokensViaRelay(
+  BridgeData _bridgeData,
+  RelayData _relayData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data containing transaction details
+</ParamField>
+
+<ParamField path="_relayData" type="RelayData">
+  Relay-specific bridging parameters
+  
+  <Expandable title="RelayData fields">
+    <ParamField path="requestId" type="bytes32">Unique request identifier</ParamField>
+    <ParamField path="nonEVMReceiver" type="bytes32">Receiver address on non-EVM chains</ParamField>
+    <ParamField path="receivingAssetId" type="bytes32">Asset to receive on destination</ParamField>
+    <ParamField path="signature" type="bytes">Relay signature for verification</ParamField>
+  </Expandable>
+</ParamField>
+
+#### swapAndStartBridgeTokensViaRelay
+
+Performs a token swap on the source chain before bridging via Relay.
+
+```typescript
+function swapAndStartBridgeTokensViaRelay(
+  BridgeData _bridgeData,
+  SwapData[] _swapData,
+  RelayData _relayData
+) external payable
+```
+
+<ParamField path="_bridgeData" type="BridgeData">
+  Standard bridge data
+</ParamField>
+
+<ParamField path="_swapData" type="SwapData[]">
+  Array of swap operations to execute before bridging
+</ParamField>
+
+<ParamField path="_relayData" type="RelayData">
+  Relay-specific parameters
+</ParamField>
+
+## Data Structures
+
+### RelayData
+
+```typescript
+struct RelayData {
+  bytes32 requestId;           // Request ID
+  bytes32 nonEVMReceiver;      // Non-EVM receiver
+  bytes32 receivingAssetId;    // Receiving asset ID
+  bytes signature;             // Relay signature
+}
+```
+
+## Usage Example
+
+```typescript
+import { RelayFacet } from '@lifi/contract-types';
+
+const relayFacet = RelayFacet__factory.connect(facetAddress, signer);
+
+const bridgeData = {
+  transactionId: '0x...',
+  bridge: 'relay',
+  integrator: 'my-dapp',
+  referrer: '0x0000000000000000000000000000000000000000',
+  sendingAssetId: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+  receiver: '0x...',
+  minAmount: ethers.utils.parseUnits('100', 6),
+  destinationChainId: 8453, // Base
+  hasSourceSwaps: false,
+  hasDestinationCall: false
+};
+
+const relayData = {
+  requestId: ethers.utils.randomBytes(32),
+  nonEVMReceiver: '0x0000000000000000000000000000000000000000000000000000000000000000',
+  receivingAssetId: '0x0000000000000000000000000000000000000000000000000000000000000000',
+  signature: '0x...'
+};
+
+const tx = await relayFacet.startBridgeTokensViaRelay(
+  bridgeData,
+  relayData,
+  { value: 0 }
+);
+
+await tx.wait();
+```
+
+## Events
+
+The facet emits standard LiFi events:
+
+- `LiFiTransferStarted(BridgeData bridgeData)`
+- `LiFiTransferCompleted`
+- `AssetSwapped` (when using swapAndStart variant)
+- `BridgeToNonEVMChain` (for non-EVM destinations)
+- `BridgeToNonEVMChainBytes32` (for non-EVM destinations with bytes32 receiver)
+
+## See Also
+
+- [Relay Protocol Documentation](https://docs.relay.link/)
+- [BridgeData Reference](/concepts/bridge-data)
+- [SwapData Reference](/concepts/swap-data)
